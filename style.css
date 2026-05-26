@@ -609,3 +609,51 @@ body { background: var(--bg); color: var(--text); }
 
 /* ── Utility ───────────────────────────────────────────────────────────────── */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+/* ── Onboarding chips ──────────────────────────────────────────────────────── */
+.ob-chip-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.ob-chip {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.ob-chip:hover { border-color: var(--accent); color: var(--accent); }
+.ob-chip.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ob-chip-toggle.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ob-textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.6;
+}
+.ob-gen-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  width: 100%;
+  max-width: 280px;
+}
+.ob-gen-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.ob-gen-step.done { color: var(--accent); }
+.ob-gen-step.active { color: var(--text); }
+.ob-gen-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+.ob-gen-step.done .ob-gen-dot { background: var(--accent); }
+.ob-gen-step.active .ob-gen-dot { background: var(--text); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }

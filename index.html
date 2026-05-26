@@ -33,57 +33,145 @@
       </div>
 
       <div class="ob-steps">
+
         <!-- Step 1: Name -->
         <div class="ob-step active" id="ob-step-1">
           <h2 class="ob-title">what's your name?</h2>
-          <p class="ob-sub">we'll use this to personalise your study plan</p>
+          <p class="ob-sub">we'll personalise everything around you</p>
           <input type="text" id="ob-name" class="ob-input" placeholder="your first name" autocomplete="off"/>
           <button class="ob-btn" id="ob-next-1">continue →</button>
         </div>
 
-        <!-- Step 2: Report card -->
+        <!-- Step 2: Grade -->
         <div class="ob-step" id="ob-step-2">
+          <h2 class="ob-title">what grade are you in?</h2>
+          <p class="ob-sub">helps calibrate difficulty and curriculum expectations</p>
+          <div class="ob-chip-grid" id="ob-grade-grid">
+            <button class="ob-chip" data-val="Grade 6">Grade 6</button>
+            <button class="ob-chip" data-val="Grade 7">Grade 7</button>
+            <button class="ob-chip" data-val="Grade 8">Grade 8</button>
+          </div>
+          <button class="ob-btn" id="ob-next-2">continue →</button>
+        </div>
+
+        <!-- Step 3: Study hours -->
+        <div class="ob-step" id="ob-step-3">
+          <h2 class="ob-title">how many hours can you study per day?</h2>
+          <p class="ob-sub">be realistic — consistent 45 minutes beats inconsistent 3 hours</p>
+          <div class="ob-chip-grid">
+            <button class="ob-chip" data-val="30 minutes">30 min</button>
+            <button class="ob-chip" data-val="45 minutes">45 min</button>
+            <button class="ob-chip" data-val="1 hour">1 hour</button>
+            <button class="ob-chip" data-val="1.5 hours">1.5 hrs</button>
+            <button class="ob-chip" data-val="2 hours">2 hours</button>
+          </div>
+          <input type="text" id="ob-hours-custom" class="ob-input" placeholder="or type your own…" style="margin-top:0.5rem"/>
+          <button class="ob-btn" id="ob-next-3">continue →</button>
+        </div>
+
+        <!-- Step 4: Study days -->
+        <div class="ob-step" id="ob-step-4">
+          <h2 class="ob-title">which days do you study?</h2>
+          <p class="ob-sub">select all that apply</p>
+          <div class="ob-chip-grid">
+            <button class="ob-chip ob-chip-toggle" data-val="Monday">mon</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Tuesday">tue</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Wednesday">wed</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Thursday">thu</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Friday">fri</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Saturday">sat</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Sunday">sun</button>
+          </div>
+          <button class="ob-btn" id="ob-next-4">continue →</button>
+        </div>
+
+        <!-- Step 5: Focus areas -->
+        <div class="ob-step" id="ob-step-5">
+          <h2 class="ob-title">what are your main focus areas?</h2>
+          <p class="ob-sub">select the subjects you most want to improve</p>
+          <div class="ob-chip-grid">
+            <button class="ob-chip ob-chip-toggle" data-val="English">English</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Mathematics">Maths</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Science">Science</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Physics">Physics</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Chemistry">Chemistry</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Biology">Biology</button>
+            <button class="ob-chip ob-chip-toggle" data-val="History">History</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Geography">Geography</button>
+            <button class="ob-chip ob-chip-toggle" data-val="Computer Science">CS</button>
+            <button class="ob-chip ob-chip-toggle" data-val="French">French</button>
+          </div>
+          <button class="ob-btn" id="ob-next-5">continue →</button>
+        </div>
+
+        <!-- Step 6: Study style -->
+        <div class="ob-step" id="ob-step-6">
+          <h2 class="ob-title">how do you learn best?</h2>
+          <p class="ob-sub">pick your top style — we'll lean tasks toward it</p>
+          <div class="ob-chip-grid">
+            <button class="ob-chip" data-val="visual learner — diagrams, mind maps, colour-coding">visual</button>
+            <button class="ob-chip" data-val="practice problems — learning by doing and drilling">practice problems</button>
+            <button class="ob-chip" data-val="reading and notes — deep reading and detailed notes">reading & notes</button>
+            <button class="ob-chip" data-val="teaching back — explaining concepts out loud to myself">teach it back</button>
+            <button class="ob-chip" data-val="mixed — a balance of all styles">mixed</button>
+          </div>
+          <button class="ob-btn" id="ob-next-6">continue →</button>
+        </div>
+
+        <!-- Step 7: Coaching -->
+        <div class="ob-step" id="ob-step-7">
+          <h2 class="ob-title">any coaching or tutoring outside school?</h2>
+          <p class="ob-sub">we'll avoid overlapping with what you're already getting help on</p>
+          <textarea id="ob-coaching" class="ob-input ob-textarea" placeholder="e.g. English tutor twice a week, Maths coaching on Saturdays — or leave blank if none" rows="3"></textarea>
+          <button class="ob-btn" id="ob-next-7">continue →</button>
+          <button class="ob-skip" id="ob-skip-7">none, skip</button>
+        </div>
+
+        <!-- Step 8: Report card -->
+        <div class="ob-step" id="ob-step-8">
           <h2 class="ob-title">upload your report card</h2>
-          <p class="ob-sub">AI will read your grades and teacher comments to understand where you need the most help</p>
-          <label class="ob-upload-label" id="ob-report-label">
+          <p class="ob-sub">AI reads your grades and teacher comments to understand exactly where to focus</p>
+          <label class="ob-upload-label">
             <input type="file" id="ob-report" accept=".pdf,.jpg,.jpeg,.png" class="ob-file-input"/>
             <span class="ob-upload-icon">↑</span>
             <span id="ob-report-name">tap to upload PDF or image</span>
           </label>
-          <button class="ob-btn" id="ob-next-2">continue →</button>
-          <button class="ob-skip" id="ob-skip-2">skip for now</button>
+          <button class="ob-btn" id="ob-next-8">continue →</button>
+          <button class="ob-skip" id="ob-skip-8">skip for now</button>
         </div>
 
-        <!-- Step 3: Syllabus -->
-        <div class="ob-step" id="ob-step-3">
+        <!-- Step 9: Syllabus -->
+        <div class="ob-step" id="ob-step-9">
           <h2 class="ob-title">upload your syllabus</h2>
-          <p class="ob-sub">course planners, timetables, or any document showing what you study this term</p>
-          <label class="ob-upload-label" id="ob-syllabus-label">
+          <p class="ob-sub">course planners, timetables — anything showing what you study this term</p>
+          <label class="ob-upload-label">
             <input type="file" id="ob-syllabus" accept=".pdf,.jpg,.jpeg,.png" class="ob-file-input"/>
             <span class="ob-upload-icon">↑</span>
             <span id="ob-syllabus-name">tap to upload PDF or image</span>
           </label>
-          <button class="ob-btn" id="ob-next-3">continue →</button>
-          <button class="ob-skip" id="ob-skip-3">skip for now</button>
+          <button class="ob-btn" id="ob-next-9">continue →</button>
+          <button class="ob-skip" id="ob-skip-9">skip for now</button>
         </div>
 
-        <!-- Step 4: API Key -->
-        <div class="ob-step" id="ob-step-4">
+        <!-- Step 10: API Key -->
+        <div class="ob-step" id="ob-step-10">
           <h2 class="ob-title">add your groq api key</h2>
-          <p class="ob-sub">free at <strong>console.groq.com</strong> — powers AI tips, content generation, and your personalised plan. stored only in your browser.</p>
+          <p class="ob-sub">free at <strong>console.groq.com</strong> — powers everything AI. stored only in your browser, never shared.</p>
           <input type="password" id="ob-apikey" class="ob-input" placeholder="gsk_…" autocomplete="off"/>
-          <button class="ob-btn" id="ob-next-4">generate my plan →</button>
-          <button class="ob-skip" id="ob-skip-4">skip — use app without AI</button>
+          <button class="ob-btn" id="ob-next-10">build my plan →</button>
+          <button class="ob-skip" id="ob-skip-10">skip — use without AI</button>
         </div>
 
-        <!-- Step 5: Generating -->
-        <div class="ob-step" id="ob-step-5">
+        <!-- Step 11: Generating -->
+        <div class="ob-step" id="ob-step-11">
           <div class="ob-generating">
             <div class="ob-spinner"></div>
             <h2 class="ob-title" id="ob-gen-title">building your plan…</h2>
             <p class="ob-sub" id="ob-gen-sub">reading your documents and generating a personalised study schedule</p>
+            <div class="ob-gen-steps" id="ob-gen-steps"></div>
           </div>
         </div>
+
       </div>
 
       <div class="ob-progress">
@@ -348,6 +436,27 @@
         <span class="settings-label">name</span>
         <input type="text" id="settings-name" class="ob-input"/>
         <button class="btn-ghost btn-sm" id="settings-save-name">save</button>
+      </div>
+
+      <div class="settings-section">
+        <span class="settings-label">daily study time</span>
+        <select id="settings-hours" class="ob-input">
+          <option>30 minutes</option>
+          <option>45 minutes</option>
+          <option selected>1 hour</option>
+          <option>1.5 hours</option>
+          <option>2 hours</option>
+        </select>
+      </div>
+
+      <div class="settings-section">
+        <span class="settings-label">focus areas</span>
+        <input type="text" id="settings-focus" class="ob-input" placeholder="e.g. English, Maths, Chemistry"/>
+      </div>
+
+      <div class="settings-section">
+        <span class="settings-label">coaching outside school</span>
+        <input type="text" id="settings-coaching" class="ob-input" placeholder="e.g. English tutor Tuesdays"/>
       </div>
 
       <div class="settings-section">

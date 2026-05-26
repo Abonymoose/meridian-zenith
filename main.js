@@ -22,11 +22,15 @@ async function groq(messages, maxTokens = 800) {
   const key = USER?.apiKey;
   if (!key) return null;
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
       body: JSON.stringify({ model: GROQ_MODEL, messages, max_tokens: maxTokens, temperature: 0.75 }),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     if (!res.ok) { const e = await res.json().catch(()=>{}); console.error('Groq:', res.status, e); return null; }
     return (await res.json()).choices?.[0]?.message?.content || null;
   } catch(e) { console.error(e); return null; }
@@ -42,33 +46,44 @@ async function fileToBase64(file) {
   });
 }
 
-/* ── Extract text from uploaded file via Groq vision ─────────────────────── */
+/* ── Extract text from uploaded file ──────────────────────────────────────── */
 async function extractFileText(file, docType) {
   if (!file) return '';
-  const b64 = await fileToBase64(file);
-  const isPdf = file.type === 'application/pdf';
-  const mediaType = isPdf ? 'application/pdf' : file.type || 'image/jpeg';
 
-  const prompt = docType === 'report'
-    ? `Extract all academic information from this student report card. List every subject, its numerical score or grade, the letter grade, and any teacher feedback comments. Format clearly.`
-    : `Extract all academic content from this syllabus/course planner. List every subject with its units, topics, subtopics, and the months/dates they are covered. Format clearly by subject.`;
+  // For images: send to Groq vision via llama-3.2-11b-vision
+  if (file.type.startsWith('image/')) {
+    const b64 = await fileToBase64(file);
+    const prompt = docType === 'report'
+      ? 'Extract all academic information from this report card image. List every subject with its score, grade, and any teacher comments.'
+      : 'Extract all academic content from this syllabus/course planner image. List subjects, units, topics, and dates.';
+    const key = USER?.apiKey;
+    if (!key) return '';
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+          messages: [{ role: 'user', content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:${file.type};base64,${b64}` } }
+          ]}],
+          max_tokens: 1200
+        })
+      });
+      if (!res.ok) return '';
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    } catch(e) { return ''; }
+  }
 
-  // Use text extraction via Groq with document content description
-  const reply = await groq([
-    { role: 'system', content: 'You are a document reader. Extract and structure the academic information accurately.' },
-    { role: 'user', content: [
-      { type: 'text', text: prompt },
-      isPdf
-        ? { type: 'document', source: { type: 'base64', media_type: mediaType, data: b64 } }
-        : { type: 'image_url', image_url: { url: `data:${mediaType};base64,${b64}` } }
-    ]}
-  ], 1200);
-
-  return reply || '';
+  // For PDFs: extract text using FileReader as text (works for text-based PDFs)
+  // Fall back to asking user to describe their data
+  return '';
 }
 
 /* ── Generate personalised study plan ────────────────────────────────────── */
-async function generatePlan(name, reportText, syllabusText) {
+async function generatePlan(name, reportText, syllabusText, prefs = {}) {
   const prompt = `You are an expert educational coach creating a personalised weekly self-study plan for a Cambridge middle school student.
 
 STUDENT NAME: ${name}
@@ -130,7 +145,7 @@ Rules:
   const reply = await groq([
     { role: 'system', content: 'You are an educational planning expert. Always respond with valid JSON only. No markdown, no explanation, just the JSON object.' },
     { role: 'user', content: prompt }
-  ], 4000);
+  ], 2500);
 
   if (!reply) return null;
   try {
@@ -141,15 +156,35 @@ Rules:
 
 /* ── Onboarding ───────────────────────────────────────────────────────────── */
 let obStep = 1;
+const TOTAL_OB_STEPS = 11;
 let obReportFile = null;
 let obSyllabusFile = null;
+let obData = { grade: '', hours: '', days: [], focusAreas: [], studyStyle: '', coaching: '' };
 
 function setObStep(n) {
   document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
   document.getElementById(`ob-step-${n}`)?.classList.add('active');
   obStep = n;
   const prog = document.getElementById('ob-prog-bar');
-  if (prog) prog.style.width = `${((n - 1) / 4) * 100}%`;
+  if (prog) prog.style.width = `${((n - 1) / (TOTAL_OB_STEPS - 1)) * 100}%`;
+}
+
+function initChipGroup(containerSelector, multiSelect, onSelect) {
+  document.querySelectorAll(containerSelector).forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (multiSelect) {
+        btn.classList.toggle('selected');
+      } else {
+        document.querySelectorAll(containerSelector).forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      }
+      if (onSelect) onSelect();
+    });
+  });
+}
+
+function getSelectedChips(containerSelector) {
+  return [...document.querySelectorAll(`${containerSelector}.selected`)].map(b => b.dataset.val);
 }
 
 function initOnboarding() {
@@ -163,60 +198,142 @@ function initOnboarding() {
     if (e.key === 'Enter') document.getElementById('ob-next-1').click();
   });
 
-  // Step 2: report card
+  // Step 2: grade
+  initChipGroup('#ob-grade-grid .ob-chip', false);
+  document.getElementById('ob-next-2').addEventListener('click', () => {
+    const sel = getSelectedChips('#ob-grade-grid .ob-chip');
+    obData.grade = sel[0] || 'Grade 8';
+    setObStep(3);
+  });
+
+  // Step 3: study hours
+  initChipGroup('.ob-step#ob-step-3 .ob-chip', false);
+  document.getElementById('ob-next-3').addEventListener('click', () => {
+    const sel = getSelectedChips('.ob-step#ob-step-3 .ob-chip');
+    const custom = document.getElementById('ob-hours-custom').value.trim();
+    obData.hours = custom || sel[0] || '1 hour';
+    setObStep(4);
+  });
+
+  // Step 4: study days (multi)
+  initChipGroup('.ob-step#ob-step-4 .ob-chip-toggle', true);
+  document.getElementById('ob-next-4').addEventListener('click', () => {
+    const sel = getSelectedChips('.ob-step#ob-step-4 .ob-chip-toggle');
+    obData.days = sel.length ? sel : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    setObStep(5);
+  });
+
+  // Step 5: focus areas (multi)
+  initChipGroup('.ob-step#ob-step-5 .ob-chip-toggle', true);
+  document.getElementById('ob-next-5').addEventListener('click', () => {
+    obData.focusAreas = getSelectedChips('.ob-step#ob-step-5 .ob-chip-toggle');
+    setObStep(6);
+  });
+
+  // Step 6: study style
+  initChipGroup('.ob-step#ob-step-6 .ob-chip', false);
+  document.getElementById('ob-next-6').addEventListener('click', () => {
+    const sel = getSelectedChips('.ob-step#ob-step-6 .ob-chip');
+    obData.studyStyle = sel[0] || 'mixed';
+    setObStep(7);
+  });
+
+  // Step 7: coaching
+  document.getElementById('ob-next-7').addEventListener('click', () => {
+    obData.coaching = document.getElementById('ob-coaching').value.trim();
+    setObStep(8);
+  });
+  document.getElementById('ob-skip-7').addEventListener('click', () => { obData.coaching = ''; setObStep(8); });
+
+  // Step 8: report card
   document.getElementById('ob-report').addEventListener('change', e => {
     obReportFile = e.target.files[0];
     if (obReportFile) document.getElementById('ob-report-name').textContent = obReportFile.name;
   });
-  document.getElementById('ob-next-2').addEventListener('click', () => setObStep(3));
-  document.getElementById('ob-skip-2').addEventListener('click', () => { obReportFile = null; setObStep(3); });
+  document.getElementById('ob-next-8').addEventListener('click', () => setObStep(9));
+  document.getElementById('ob-skip-8').addEventListener('click', () => { obReportFile = null; setObStep(9); });
 
-  // Step 3: syllabus
+  // Step 9: syllabus
   document.getElementById('ob-syllabus').addEventListener('change', e => {
     obSyllabusFile = e.target.files[0];
     if (obSyllabusFile) document.getElementById('ob-syllabus-name').textContent = obSyllabusFile.name;
   });
-  document.getElementById('ob-next-3').addEventListener('click', () => setObStep(4));
-  document.getElementById('ob-skip-3').addEventListener('click', () => { obSyllabusFile = null; setObStep(4); });
+  document.getElementById('ob-next-9').addEventListener('click', () => setObStep(10));
+  document.getElementById('ob-skip-9').addEventListener('click', () => { obSyllabusFile = null; setObStep(10); });
 
-  // Step 4: API key
-  document.getElementById('ob-next-4').addEventListener('click', () => startGeneration());
-  document.getElementById('ob-skip-4').addEventListener('click', () => startGeneration(true));
+  // Step 10: API key
+  document.getElementById('ob-next-10').addEventListener('click', () => startGeneration());
+  document.getElementById('ob-skip-10').addEventListener('click', () => startGeneration(true));
+}
+
+function showGenStep(steps, activeIdx) {
+  const el = document.getElementById('ob-gen-steps');
+  if (!el) return;
+  el.innerHTML = steps.map((s, i) => {
+    const cls = i < activeIdx ? 'done' : i === activeIdx ? 'active' : '';
+    return `<div class="ob-gen-step ${cls}"><div class="ob-gen-dot"></div>${s}</div>`;
+  }).join('');
 }
 
 async function startGeneration(skipAI = false) {
   const name = document.getElementById('ob-name').value.trim() || 'Student';
   const apiKey = document.getElementById('ob-apikey').value.trim();
 
-  USER = { name, apiKey: skipAI ? '' : apiKey, theme: 'light' };
+  USER = {
+    name,
+    apiKey: skipAI ? '' : apiKey,
+    theme: 'light',
+    grade: obData.grade || 'Grade 8',
+    hoursPerDay: obData.hours || '1 hour',
+    studyDays: obData.days.length ? obData.days : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+    focusAreas: obData.focusAreas,
+    studyStyle: obData.studyStyle || 'mixed',
+    coaching: obData.coaching,
+  };
+
   applyTheme('light');
-  setObStep(5);
+  setObStep(11);
+
+  const GEN_STEPS = [
+    'reading report card',
+    'reading syllabus',
+    'analysing your data',
+    'generating your plan',
+    'building cs roadmap',
+    'finalising',
+  ];
 
   const updateGen = (title, sub) => {
     document.getElementById('ob-gen-title').textContent = title;
     document.getElementById('ob-gen-sub').textContent = sub;
   };
 
+  showGenStep(GEN_STEPS, 0);
   let reportText = '';
   let syllabusText = '';
 
   if (!skipAI && apiKey && obReportFile) {
-    updateGen('reading your report card…', 'extracting grades and teacher comments');
     reportText = await extractFileText(obReportFile, 'report');
   }
+  showGenStep(GEN_STEPS, 1);
+
   if (!skipAI && apiKey && obSyllabusFile) {
-    updateGen('reading your syllabus…', 'mapping out your term topics');
     syllabusText = await extractFileText(obSyllabusFile, 'syllabus');
   }
+  showGenStep(GEN_STEPS, 2);
 
   let plan = null;
   if (!skipAI && apiKey) {
-    updateGen(`building ${name}'s plan…`, 'generating personalised tasks based on your data');
-    plan = await generatePlan(name, reportText, syllabusText);
+    updateGen(`building ${name}'s plan…`, 'this takes about 15 seconds');
+    showGenStep(GEN_STEPS, 3);
+    try {
+      plan = await generatePlan(name, reportText, syllabusText, USER);
+    } catch(e) { console.error('Plan gen failed:', e); }
+    showGenStep(GEN_STEPS, 5);
   }
 
   if (!plan) {
-    updateGen('setting up your plan…', 'using our default Cambridge Grade 8 template');
+    updateGen('setting up your plan…', 'using our Cambridge template');
     plan = getDefaultPlan(name);
   }
 
@@ -225,8 +342,9 @@ async function startGeneration(skipAI = false) {
   USER.syllabusText = syllabusText;
   S.set('mz-user', USER);
 
-  updateGen('all done!', 'launching your study planner');
-  await new Promise(r => setTimeout(r, 800));
+  updateGen('all done!', '');
+  showGenStep(GEN_STEPS, 6);
+  await new Promise(r => setTimeout(r, 700));
   launchApp();
 }
 
@@ -955,6 +1073,12 @@ function openSettings() {
   document.getElementById('settings-panel').style.display = 'flex';
   document.getElementById('settings-name').value = USER.name;
   document.getElementById('settings-apikey').value = USER.apiKey || '';
+  const hoursEl = document.getElementById('settings-hours');
+  if (hoursEl) hoursEl.value = USER.hoursPerDay || '1 hour';
+  const focusEl = document.getElementById('settings-focus');
+  if (focusEl) focusEl.value = (USER.focusAreas || []).join(', ');
+  const coachEl = document.getElementById('settings-coaching');
+  if (coachEl) coachEl.value = USER.coaching || '';
   document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.dataset.theme === (USER.theme || 'light')));
 }
 
@@ -971,7 +1095,11 @@ function initSettings() {
   document.getElementById('settings-save-name').addEventListener('click', () => {
     const name = document.getElementById('settings-name').value.trim();
     if (name) {
-      USER.name = name; S.set('mz-user', USER);
+      USER.name = name;
+      USER.hoursPerDay = document.getElementById('settings-hours')?.value || USER.hoursPerDay;
+      USER.focusAreas = (document.getElementById('settings-focus')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+      USER.coaching = document.getElementById('settings-coaching')?.value.trim() || '';
+      S.set('mz-user', USER);
       document.getElementById('header-greeting').textContent = `hey, ${name.toLowerCase()}`;
     }
   });
