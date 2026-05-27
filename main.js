@@ -503,6 +503,7 @@ function launchApp() {
   initSettings();
   renderStreak();
   initCountdown();
+  if(!S.get("mz-tour-done"))setTimeout(startTour,600);
 }
 
 function applyTheme(t) {
@@ -975,17 +976,251 @@ function initCS(){
 }
 
 /* ── Projects tab ──────────────────────────────────────── */
+/* ── Skill Tree ─────────────────────────────────────────── */
+const SUBJ_COLORS2={'English':'#FDE8D8','Mathematics':'#E0F0FF','Physics':'#E8E0F8','Chemistry':'#FDE8EE','Biology':'#E0F4EC','History':'#F0E8D4','Geography':'#E8F4DC','CS':'#DCF4E8','Computer Science':'#DCF4E8','French':'#E0EEF8','Science':'#E0F4EC','Social Studies':'#F0E8D4'};
+const SUBJ_EMOJIS2={'English':'📖','Mathematics':'📐','Physics':'⚡','Chemistry':'🧪','Biology':'🌿','History':'🏛','Geography':'🌍','CS':'💻','Computer Science':'💻','French':'🇫🇷','Science':'🔬','Social Studies':'🗺'};
+function sc(s){return SUBJ_COLORS2[s]||'#E8E8E8';}
+function se(s){return SUBJ_EMOJIS2[s]||'📚';}
+
 function initProjects(){
-  const el=document.getElementById('projects-content');
-  el.innerHTML=(USER.plan.projects||[]).map(p=>`
-    <div class="project-card">
-      <div class="project-month">${p.month} · ${(p.subjects||[]).join(' + ')}</div>
-      <h3 class="project-title">${p.title}</h3>
-      <div class="project-subj-tags">${(p.subjects||[]).map(s=>`<span class="subj-chip" style="background:var(--a-m);color:var(--a)">${s}</span>`).join('')}</div>
-      <p class="project-desc">${p.description}</p>
-      <ol class="project-steps">${(p.steps||[]).map(s=>`<li>${s}</li>`).join('')}</ol>
-      <div class="project-deliverable"><strong>deliverable:</strong> ${p.deliverable}</div>
-    </div>`).join('');
+  const projects=USER.plan?.projects||[];
+  if(!projects.length)return;
+  const startIdx=S.get('mz-proj-start');
+  if(startIdx===null||startIdx===undefined){
+    showPickModal(projects,i=>{S.set('mz-proj-start',i);renderTree(projects,i);});
+  } else {
+    renderTree(projects,startIdx);
+  }
+  document.getElementById('project-detail-close').addEventListener('click',()=>{
+    document.getElementById('project-detail').style.display='none';
+  });
+}
+
+function showPickModal(projects,onPick){
+  document.getElementById('tree-pick-modal').style.display='flex';
+  document.getElementById('tree-wrap').style.display='none';
+  const list=document.getElementById('tree-pick-list');
+  list.innerHTML=projects.map((p,i)=>`
+    <button class="tree-pick-item" data-i="${i}">
+      <span class="tree-pick-dot" style="background:${sc(p.subjects?.[0])}"></span>
+      <div>
+        <div class="tree-pick-name">${p.title}</div>
+        <div class="tree-pick-meta">${p.month} · ${(p.subjects||[]).join(' + ')}</div>
+      </div>
+    </button>`).join('');
+  list.querySelectorAll('.tree-pick-item').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.getElementById('tree-pick-modal').style.display='none';
+      document.getElementById('tree-wrap').style.display='block';
+      onPick(parseInt(btn.dataset.i));
+    });
+  });
+}
+
+function buildLayout(projects,centerIdx){
+  const others=projects.map((p,i)=>({...p,_i:i})).filter((_,i)=>i!==centerIdx);
+  const branches={};
+  others.forEach(p=>{const s=p.subjects?.[0]||'General';if(!branches[s])branches[s]=[];branches[s].push(p);});
+  const bKeys=Object.keys(branches);
+  const nodes=[{idx:centerIdx,project:projects[centerIdx],type:'center',x:0.5,y:0.5,parentIdx:null}];
+  const aStep=(2*Math.PI)/Math.max(bKeys.length,1);
+  bKeys.forEach((subj,bi)=>{
+    const base=bi*aStep-Math.PI/2;
+    branches[subj].forEach((p,pi)=>{
+      const r=pi===0?0.22:0.38;
+      const off=pi===0?0:(pi%2===0?0.28:-0.28);
+      const angle=base+off;
+      nodes.push({idx:p._i,project:p,type:'branch',x:0.5+Math.cos(angle)*r,y:0.5+Math.sin(angle)*r,parentIdx:pi===0?centerIdx:branches[subj][0]._i,subject:subj,order:pi});
+    });
+  });
+  return nodes;
+}
+
+function getNodeState(node,completed,centerIdx){
+  if(node.type==='center')return completed.includes(node.idx)?'completed center':'center';
+  if(completed.includes(node.idx))return'completed unlocked';
+  if(node.parentIdx===null||node.parentIdx===centerIdx||completed.includes(node.parentIdx))return'available';
+  return'locked';
+}
+
+function renderTree(projects,centerIdx){
+  document.getElementById('tree-pick-modal').style.display='none';
+  document.getElementById('tree-wrap').style.display='block';
+  const completed=S.get('mz-proj-complete')||[];
+  const wrap=document.getElementById('tree-wrap');
+  const svg=document.getElementById('tree-svg');
+  const nodesEl=document.getElementById('tree-nodes');
+  const W=wrap.clientWidth||800, H=wrap.clientHeight||600;
+  const layout=buildLayout(projects,centerIdx);
+
+  // SVG lines
+  svg.innerHTML='';
+  layout.filter(n=>n.parentIdx!==null).forEach(n=>{
+    const par=layout.find(p=>p.idx===n.parentIdx);
+    if(!par)return;
+    const state=getNodeState(n,completed,centerIdx);
+    const lit=!state.includes('locked');
+    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',par.x*W);line.setAttribute('y1',par.y*H);
+    line.setAttribute('x2',n.x*W);line.setAttribute('y2',n.y*H);
+    line.setAttribute('class',`tree-line ${lit?'lit':'dashed'}`);
+    // Animate line drawing
+    const len=Math.hypot((n.x-par.x)*W,(n.y-par.y)*H);
+    line.style.strokeDasharray=len;
+    line.style.strokeDashoffset=lit?'0':len;
+    if(lit){line.style.animation=`drawLine 0.6s ease forwards`;}
+    svg.appendChild(line);
+  });
+
+  // CSS for line animation
+  if(!document.getElementById('line-anim-style')){
+    const s=document.createElement('style');s.id='line-anim-style';
+    s.textContent='@keyframes drawLine{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}';
+    document.head.appendChild(s);
+  }
+
+  // Nodes
+  nodesEl.innerHTML='';
+  layout.forEach((n,ni)=>{
+    const state=getNodeState(n,completed,centerIdx);
+    const locked=state==='locked';
+    const isCenter=state.includes('center');
+    const isDone=state.includes('completed');
+    const p=n.project;
+    const color=sc(p.subjects?.[0]);
+    const emoji=se(p.subjects?.[0]);
+
+    const el=document.createElement('div');
+    el.className='tree-node';
+    el.style.left=(n.x*W)+'px';
+    el.style.top=(n.y*H)+'px';
+    el.style.animationDelay=(ni*60)+'ms';
+    el.style.animation=`nodeIn 0.4s ease ${ni*60}ms both`;
+
+    const circClass=isCenter?(isDone?'completed center':'center'):isDone?'completed unlocked':locked?'locked':'available unlocked';
+    const bgStyle=isCenter?'':`background:${color}33;border-color:${color};`;
+
+    el.innerHTML=`
+      <div class="node-circle ${circClass}" style="${bgStyle}">
+        <span class="node-icon">${locked?'🔒':emoji}</span>
+        ${isDone?'<span style="position:absolute;bottom:-2px;right:-2px;font-size:0.6rem">✓</span>':''}
+      </div>
+      <span class="node-label">${locked?'???':p.title}</span>
+      ${n.subject&&!locked?`<span class="node-subject-tag" style="background:${color};color:#333">${n.subject}</span>`:''}
+    `;
+
+    el.addEventListener('click',()=>openProjectDetail(n.idx,projects,centerIdx,layout,()=>renderTree(projects,centerIdx)));
+    nodesEl.appendChild(el);
+  });
+
+  // Node entrance animation
+  if(!document.getElementById('node-anim-style')){
+    const s=document.createElement('style');s.id='node-anim-style';
+    s.textContent='@keyframes nodeIn{from{opacity:0;transform:translate(-50%,-50%) scale(0.5)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}';
+    document.head.appendChild(s);
+  }
+
+  // Pan
+  let panning=false,ox=0,oy=0,lx=0,ly=0;
+  wrap.onmousedown=e=>{panning=true;ox=e.clientX-lx;oy=e.clientY-ly;};
+  wrap.onmousemove=e=>{if(!panning)return;const tx=e.clientX-ox,ty=e.clientY-oy;nodesEl.style.transform=`translate(${tx}px,${ty}px)`;svg.style.transform=`translate(${tx}px,${ty}px)`;lx=tx;ly=ty;};
+  wrap.onmouseup=wrap.onmouseleave=()=>{panning=false;};
+}
+
+function openProjectDetail(idx,projects,centerIdx,layout,onComplete){
+  const panel=document.getElementById('project-detail');
+  const content=document.getElementById('project-detail-content');
+  const p=projects[idx];
+  const completed=S.get('mz-proj-complete')||[];
+  panel.style.display='block';
+
+  const node=layout.find(n=>n.idx===idx);
+  const state=getNodeState(node,completed,centerIdx);
+
+  if(state==='locked'){
+    const prereq=projects[node.parentIdx];
+    content.innerHTML=`<div class="project-detail-locked"><div class="lock-icon">🔒</div><div class="lock-title">${p.title}</div><div class="lock-sub">complete <strong>${prereq?.title||'the previous project'}</strong> to unlock this branch</div></div>`;
+    return;
+  }
+
+  const isDone=completed.includes(idx);
+  content.innerHTML=`
+    <div class="project-detail-node-header">
+      <div class="project-detail-month">${p.month} · ${(p.subjects||[]).join(' + ')}</div>
+      <h3 class="project-detail-title">${p.title}</h3>
+      <div class="project-detail-tags">${(p.subjects||[]).map(s=>`<span class="subj-chip" style="background:${sc(s)};color:#333">${s}</span>`).join('')}</div>
+    </div>
+    <p class="project-detail-desc">${p.description}</p>
+    <ol class="project-detail-steps">${(p.steps||[]).map(s=>`<li>${s}</li>`).join('')}</ol>
+    <div class="project-detail-deliverable"><strong>deliverable:</strong> ${p.deliverable}</div>
+    <button class="project-complete-btn ${isDone?'done':''}" id="proj-btn">${isDone?'✓ completed':'mark as complete'}</button>
+  `;
+
+  document.getElementById('proj-btn').addEventListener('click',()=>{
+    if(isDone)return;
+    const upd=[...(S.get('mz-proj-complete')||[]),idx];
+    S.set('mz-proj-complete',upd);
+    onComplete();
+    openProjectDetail(idx,projects,centerIdx,buildLayout(projects,centerIdx),onComplete);
+  });
+}
+
+/* ── Tour ───────────────────────────────────────────────── */
+const TOUR=[
+  {sel:'#today-panel',title:"today's overview",desc:"see today's subjects, streak, and jump straight to your plan.",pos:'right'},
+  {sel:'.timer-panel',title:'session timer',desc:'pick a duration, type what you're working on, and start. alarm fires when done.',pos:'right'},
+  {sel:'.checklist-panel',title:'task checklist',desc:'today's tasks auto-loaded. click any task to open the detail panel with ai tips and generated content.',pos:'left'},
+  {sel:'.detail-panel',title:'detail panel',desc:'context, ai-generated content, and a chat box for any task.',pos:'left'},
+  {sel:'.music-panel',title:'ambient sound',desc:'brown noise, rain, or binaural focus tones. plays while you study.',pos:'right'},
+  {sel:'[data-tab="plan"]',title:'my plan',desc:'your full week day by day. ai-generated from your documents.',pos:'right'},
+  {sel:'[data-tab="projects"]',title:'project tree',desc:'a visual skill tree. complete projects to unlock new branches.',pos:'right'},
+  {sel:'[data-tab="cs"]',title:'cs roadmap',desc:'16-week self-study curriculum. algorithms, data structures, recursion.',pos:'right'},
+  {sel:'.sidebar-settings-btn',title:'settings',desc:'theme, api key, preferences, regenerate plan anytime.',pos:'right'},
+];
+let tourIdx=0;
+
+function startTour(){
+  const ov=document.getElementById('tour-overlay');
+  ov.style.display='block';ov.classList.add('active');
+  tourIdx=0;showTourStep(0);
+  document.getElementById('tour-next').onclick=()=>{
+    tourIdx++;
+    if(tourIdx>=TOUR.length)endTour();else showTourStep(tourIdx);
+  };
+  document.getElementById('tour-skip').onclick=endTour;
+}
+
+function endTour(){
+  document.getElementById('tour-overlay').style.display='none';
+  document.getElementById('tour-overlay').classList.remove('active');
+  S.set('mz-tour-done',true);
+}
+
+function showTourStep(i){
+  const step=TOUR[i];
+  const target=document.querySelector(step.sel);
+  document.getElementById('tour-step-label').textContent=`step ${i+1} of ${TOUR.length}`;
+  document.getElementById('tour-title').textContent=step.title;
+  document.getElementById('tour-desc').textContent=step.desc;
+  document.getElementById('tour-next').textContent=i===TOUR.length-1?'finish →':'next →';
+  document.getElementById('tour-dots').innerHTML=TOUR.map((_,j)=>`<div class="tour-dot ${j===i?'active':''}"></div>`).join('');
+
+  const spot=document.getElementById('tour-spotlight');
+  const card=document.getElementById('tour-card');
+
+  if(target){
+    const r=target.getBoundingClientRect(),pad=8;
+    spot.style.cssText=`left:${r.left-pad}px;top:${r.top-pad}px;width:${r.width+pad*2}px;height:${r.height+pad*2}px;`;
+    const cw=300,ch=180;
+    let cx=step.pos==='right'?r.right+16:r.left-cw-16;
+    let cy=r.top+r.height/2-ch/2;
+    cx=Math.max(8,Math.min(cx,window.innerWidth-cw-8));
+    cy=Math.max(8,Math.min(cy,window.innerHeight-ch-8));
+    card.style.cssText=`left:${cx}px;top:${cy}px;transform:none;`;
+  } else {
+    spot.style.cssText='left:50%;top:50%;width:0;height:0;';
+    card.style.cssText='left:50%;top:50%;transform:translate(-50%,-50%);';
+  }
 }
 
 /* ── Settings ──────────────────────────────────────────── */
