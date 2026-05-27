@@ -1,1188 +1,1041 @@
-/* ═══════════════════════════════════════════════════════════════════════════
-   MERIDIAN ZENITH — main.js
-   Generic AI-powered study planner for Cambridge Middle School students
-═══════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   MERIDIAN — main.js
+   AI-powered study planner for Cambridge middle school
+═══════════════════════════════════════════════════════════ */
 
-/* ── Storage helpers ──────────────────────────────────────────────────────── */
 const S = {
   get: k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
-  set: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
+  set: (k,v) => localStorage.setItem(k, JSON.stringify(v)),
   del: k => localStorage.removeItem(k),
 };
 
-/* ── State ────────────────────────────────────────────────────────────────── */
-let USER = null;   // { name, apiKey, plan, reportCardText, syllabusText, theme }
-let currentDetailTask = null;
-let detailChatHistory = [];
+let USER = null;
+let currentTask = null;
+let chatHistory = [];
 
-/* ── Groq ─────────────────────────────────────────────────────────────────── */
-const GROQ_MODEL = 'llama-3.1-8b-instant';
+/* ── Groq ──────────────────────────────────────────────── */
+const MODEL = 'llama-3.1-8b-instant';
 
-async function groq(messages, maxTokens = 800) {
-  const key = USER?.apiKey;
-  if (!key) return null;
+async function groq(messages, max = 600) {
+  if (!USER?.apiKey) return null;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 28000);
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model: GROQ_MODEL, messages, max_tokens: maxTokens, temperature: 0.75 }),
-      signal: controller.signal
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${USER.apiKey}` },
+      body: JSON.stringify({ model: MODEL, messages, max_tokens: max, temperature: 0.75 }),
+      signal: ctrl.signal,
     });
-    clearTimeout(timeout);
-    if (!res.ok) { const e = await res.json().catch(()=>{}); console.error('Groq:', res.status, e); return null; }
-    return (await res.json()).choices?.[0]?.message?.content || null;
+    clearTimeout(t);
+    if (!r.ok) { const e = await r.json().catch(()=>{}); console.error('Groq', r.status, e); return null; }
+    return (await r.json()).choices?.[0]?.message?.content || null;
   } catch(e) { console.error(e); return null; }
 }
 
-/* ── File → base64 ────────────────────────────────────────────────────────── */
-async function fileToBase64(file) {
+async function toB64(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result.split(',')[1]);
-    r.onerror = () => rej(new Error('read failed'));
+    r.onerror = rej;
     r.readAsDataURL(file);
   });
 }
 
-/* ── Extract text from uploaded file ──────────────────────────────────────── */
-async function extractFileText(file, docType) {
-  if (!file) return '';
+async function extractDoc(file, type) {
+  if (!file || !USER?.apiKey) return '';
+  if (!file.type.startsWith('image/')) return ''; // only images supported via vision
+  try {
+    const b64 = await toB64(file);
+    const prompt = type === 'existing'
+      ? 'Extract the complete study schedule from this image. List every day, subject, task, and time mentioned. Be thorough and structured.'
+      : type === 'report'
+      ? 'Extract all academic data from this report card. List every subject with its score, grade, and any teacher feedback or comments.'
+      : 'Extract all academic content from this syllabus/course planner. List every subject with units, topics, subtopics, and dates/months.';
 
-  // For images: send to Groq vision via llama-3.2-11b-vision
-  if (file.type.startsWith('image/')) {
-    const b64 = await fileToBase64(file);
-    const prompt = docType === 'report'
-      ? 'Extract all academic information from this report card image. List every subject with its score, grade, and any teacher comments.'
-      : 'Extract all academic content from this syllabus/course planner image. List subjects, units, topics, and dates.';
-    const key = USER?.apiKey;
-    if (!key) return '';
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-          messages: [{ role: 'user', content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: `data:${file.type};base64,${b64}` } }
-          ]}],
-          max_tokens: 1200
-        })
-      });
-      if (!res.ok) return '';
-      const data = await res.json();
-      return data.choices?.[0]?.message?.content || '';
-    } catch(e) { return ''; }
-  }
-
-  // For PDFs: extract text using FileReader as text (works for text-based PDFs)
-  // Fall back to asking user to describe their data
-  return '';
+    const key = USER.apiKey;
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:${file.type};base64,${b64}` } }
+        ]}],
+        max_tokens: 1200
+      })
+    });
+    if (!r.ok) return '';
+    return (await r.json()).choices?.[0]?.message?.content || '';
+  } catch(e) { return ''; }
 }
 
-/* ── Generate personalised study plan ────────────────────────────────────── */
-async function generatePlan(name, reportText, syllabusText, prefs = {}) {
-  const prompt = `You are an expert educational coach creating a personalised weekly self-study plan for a Cambridge middle school student.
+/* ── Plan generation ───────────────────────────────────── */
+async function generatePlan(prefs, reportText, syllabusText, existingPlanText) {
+  const { name, grade, hours, days, focus, style, coaching } = prefs;
+  const DAY_MAP = { Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6, Sunday:0 };
+  const dayNums = days.map(d => DAY_MAP[d]).filter(n => n !== undefined);
 
-STUDENT NAME: ${name}
+  let context = '';
+  if (existingPlanText) context = `EXISTING STUDY SCHEDULE (build the app tasks around this):\n${existingPlanText}\n\n`;
+  if (reportText) context += `REPORT CARD DATA:\n${reportText}\n\n`;
+  if (syllabusText) context += `SYLLABUS:\n${syllabusText}\n\n`;
 
-${reportText ? `REPORT CARD DATA:\n${reportText}\n` : 'No report card provided — create a balanced general plan.'}
+  const prompt = `You are an expert Cambridge educational coach. Build a personalised self-study plan.
 
-${syllabusText ? `SYLLABUS/COURSE PLANNER:\n${syllabusText}\n` : 'No syllabus provided — use standard Cambridge Grade 8 curriculum.'}
+STUDENT: ${name}, ${grade || 'Grade 8'}, Cambridge curriculum
+DAILY STUDY TIME: ${hours || '1 hour'} — fit ALL tasks per day within this
+STUDY DAYS: ONLY ${days.join(', ')} (day numbers ${dayNums.join(',')})
+${focus?.length ? `PRIORITY SUBJECTS (most time/tasks): ${focus.join(', ')}` : ''}
+${style ? `LEARNING STYLE: ${style}` : ''}
+${coaching ? `ALREADY COACHED IN (do NOT include): ${coaching}` : ''}
 
-Create a detailed 6-day weekly self-study plan (Monday to Saturday, no Sunday). Each day should have 2-3 subjects with specific tasks.
+${context || 'No documents provided — use standard Cambridge curriculum for this grade.'}
 
-Respond ONLY with valid JSON in this exact format:
+STRICT RULES:
+1. ONLY include days: ${days.join(', ')} — day numbers ${dayNums.join(',')} — nothing else
+2. Each day's total task mins MUST fit within ${hours || '1 hour'}
+3. If report card provided: prioritise weak subjects (lower scores), reference actual teacher feedback
+4. If syllabus provided: every task must reference a REAL topic from the syllabus — no generic tasks
+5. If existing schedule provided: restructure the student's actual schedule into the app format
+6. Skip subjects already covered by coaching
+7. generateContent:true only for tasks needing fresh AI content each session (reading, problems, exercises)
+8. Every task must have a "detail" field with specific HOW-TO advice
+9. Use soft pastel colors (#FDE8D8, #E0F0FF, #DCF4E8, #E8E0F8, #FDE8EE, #E0F4EC, #F0E8D4, #E8F4DC, #E0EEF8)
+
+Respond ONLY with valid JSON (no markdown, no explanation):
 {
-  "summary": "2-3 sentence personalised summary of the student's strengths, weaknesses, and focus areas based on their data",
+  "summary": "2-3 sentences: strengths, weaknesses, key focus based on their actual data",
   "days": {
-    "1": {
-      "name": "Monday",
-      "subjects": [
-        {
-          "name": "Subject Name",
-          "color": "#hex color for chip background",
-          "duration": "X min",
-          "tasks": [
-            {
-              "text": "Specific task description",
-              "mins": 15,
-              "detail": "Detailed explanation of how to do this task well",
-              "generateContent": true or false
-            }
-          ]
-        }
-      ]
-    },
-    "2": { ... },
-    "3": { ... },
-    "4": { ... },
-    "5": { ... },
-    "6": { "name": "Saturday", "subjects": [{ "name": "Project", ... }] }
+    "${dayNums[0]||1}": {
+      "name": "${days[0]||'Monday'}",
+      "subjects": [{
+        "name": "Subject",
+        "color": "#FDE8D8",
+        "duration": "25 min",
+        "tasks": [{ "text": "specific task referencing real syllabus topic", "mins": 15, "detail": "how to do this well", "generateContent": false }]
+      }]
+    }
   },
-  "csRoadmap": [
-    { "month": "Month Name", "theme": "theme description", "weeks": [
-      { "range": "Wk 1-2", "title": "Topic title", "description": "What to learn and do" }
-    ], "resources": ["resource 1", "resource 2"] }
-  ],
-  "projects": [
-    { "month": "Month", "title": "Project title", "subjects": ["Subject1", "Subject2"], "description": "What the project involves", "steps": ["Step 1", "Step 2", "Step 3", "Step 4"], "deliverable": "What they produce" }
-  ]
+  "csRoadmap": [{ "month": "Month", "theme": "theme desc", "weeks": [{ "range": "Wk 1-2", "title": "title", "description": "what to do and why" }], "resources": ["resource 1"] }],
+  "projects": [{ "month": "Month", "title": "Project title", "subjects": ["S1","S2"], "description": "what it involves", "steps": ["step1","step2","step3","step4"], "deliverable": "what they produce" }]
 }
 
-Rules:
-- Base priorities on actual weak subjects (low scores) from the report card
-- Reference actual topics from the syllabus where provided
-- Make tasks specific and actionable, not vague
-- generateContent: true for tasks where AI should generate fresh content each session (reading extracts, practice problems, exercises)
-- Include 4 months in csRoadmap (the advanced self-study CS curriculum)
-- Include 4 monthly projects
-- Colors should be soft pastels that work on light backgrounds
-- Every task should have a detail field with genuine pedagogical advice`;
+Include ALL ${days.length} study day(s): ${days.map((d,i)=>`${dayNums[i]}=${d}`).join(', ')}
+Include exactly 4 months in csRoadmap, 4 projects.`;
 
   const reply = await groq([
-    { role: 'system', content: 'You are an educational planning expert. Always respond with valid JSON only. No markdown, no explanation, just the JSON object.' },
+    { role: 'system', content: 'Expert educational planner. Return valid JSON only. No markdown. No explanation.' },
     { role: 'user', content: prompt }
-  ], 2500);
+  ], 2800);
 
   if (!reply) return null;
   try {
-    const clean = reply.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+    const clean = reply.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     return JSON.parse(clean);
-  } catch(e) { console.error('Plan parse error:', e, reply?.slice(0, 200)); return null; }
+  } catch(e) { console.error('Plan parse fail', e, reply?.slice(0,300)); return null; }
 }
 
-/* ── Onboarding ───────────────────────────────────────────────────────────── */
-let obStep = 1;
-const TOTAL_OB_STEPS = 11;
-let obReportFile = null;
-let obSyllabusFile = null;
-let obData = { grade: '', hours: '', days: [], focusAreas: [], studyStyle: '', coaching: '' };
-
-function setObStep(n) {
-  document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
-  document.getElementById(`ob-step-${n}`)?.classList.add('active');
-  obStep = n;
-  const prog = document.getElementById('ob-prog-bar');
-  if (prog) prog.style.width = `${((n - 1) / (TOTAL_OB_STEPS - 1)) * 100}%`;
-}
-
-function initChipGroup(containerSelector, multiSelect, onSelect) {
-  document.querySelectorAll(containerSelector).forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (multiSelect) {
-        btn.classList.toggle('selected');
-      } else {
-        document.querySelectorAll(containerSelector).forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-      }
-      if (onSelect) onSelect();
-    });
-  });
-}
-
-function getSelectedChips(containerSelector) {
-  return [...document.querySelectorAll(`${containerSelector}.selected`)].map(b => b.dataset.val);
-}
-
-function initOnboarding() {
-  // Step 1: name
-  document.getElementById('ob-next-1').addEventListener('click', () => {
-    const name = document.getElementById('ob-name').value.trim();
-    if (!name) { document.getElementById('ob-name').focus(); return; }
-    setObStep(2);
-  });
-  document.getElementById('ob-name').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('ob-next-1').click();
-  });
-
-  // Step 2: grade
-  initChipGroup('#ob-grade-grid .ob-chip', false);
-  document.getElementById('ob-next-2').addEventListener('click', () => {
-    const sel = getSelectedChips('#ob-grade-grid .ob-chip');
-    obData.grade = sel[0] || 'Grade 8';
-    setObStep(3);
-  });
-
-  // Step 3: study hours
-  initChipGroup('.ob-step#ob-step-3 .ob-chip', false);
-  document.getElementById('ob-next-3').addEventListener('click', () => {
-    const sel = getSelectedChips('.ob-step#ob-step-3 .ob-chip');
-    const custom = document.getElementById('ob-hours-custom').value.trim();
-    obData.hours = custom || sel[0] || '1 hour';
-    setObStep(4);
-  });
-
-  // Step 4: study days (multi)
-  initChipGroup('.ob-step#ob-step-4 .ob-chip-toggle', true);
-  document.getElementById('ob-next-4').addEventListener('click', () => {
-    const sel = getSelectedChips('.ob-step#ob-step-4 .ob-chip-toggle');
-    obData.days = sel.length ? sel : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    setObStep(5);
-  });
-
-  // Step 5: focus areas (multi)
-  initChipGroup('.ob-step#ob-step-5 .ob-chip-toggle', true);
-  document.getElementById('ob-next-5').addEventListener('click', () => {
-    obData.focusAreas = getSelectedChips('.ob-step#ob-step-5 .ob-chip-toggle');
-    setObStep(6);
-  });
-
-  // Step 6: study style
-  initChipGroup('.ob-step#ob-step-6 .ob-chip', false);
-  document.getElementById('ob-next-6').addEventListener('click', () => {
-    const sel = getSelectedChips('.ob-step#ob-step-6 .ob-chip');
-    obData.studyStyle = sel[0] || 'mixed';
-    setObStep(7);
-  });
-
-  // Step 7: coaching
-  document.getElementById('ob-next-7').addEventListener('click', () => {
-    obData.coaching = document.getElementById('ob-coaching').value.trim();
-    setObStep(8);
-  });
-  document.getElementById('ob-skip-7').addEventListener('click', () => { obData.coaching = ''; setObStep(8); });
-
-  // Step 8: report card
-  document.getElementById('ob-report').addEventListener('change', e => {
-    obReportFile = e.target.files[0];
-    if (obReportFile) document.getElementById('ob-report-name').textContent = obReportFile.name;
-  });
-  document.getElementById('ob-next-8').addEventListener('click', () => setObStep(9));
-  document.getElementById('ob-skip-8').addEventListener('click', () => { obReportFile = null; setObStep(9); });
-
-  // Step 9: syllabus
-  document.getElementById('ob-syllabus').addEventListener('change', e => {
-    obSyllabusFile = e.target.files[0];
-    if (obSyllabusFile) document.getElementById('ob-syllabus-name').textContent = obSyllabusFile.name;
-  });
-  document.getElementById('ob-next-9').addEventListener('click', () => setObStep(10));
-  document.getElementById('ob-skip-9').addEventListener('click', () => { obSyllabusFile = null; setObStep(10); });
-
-  // Step 10: API key
-  document.getElementById('ob-next-10').addEventListener('click', () => startGeneration());
-  document.getElementById('ob-skip-10').addEventListener('click', () => startGeneration(true));
-}
-
-function showGenStep(steps, activeIdx) {
-  const el = document.getElementById('ob-gen-steps');
-  if (!el) return;
-  el.innerHTML = steps.map((s, i) => {
-    const cls = i < activeIdx ? 'done' : i === activeIdx ? 'active' : '';
-    return `<div class="ob-gen-step ${cls}"><div class="ob-gen-dot"></div>${s}</div>`;
-  }).join('');
-}
-
-async function startGeneration(skipAI = false) {
-  const name = document.getElementById('ob-name').value.trim() || 'Student';
-  const apiKey = document.getElementById('ob-apikey').value.trim();
-
-  USER = {
-    name,
-    apiKey: skipAI ? '' : apiKey,
-    theme: 'light',
-    grade: obData.grade || 'Grade 8',
-    hoursPerDay: obData.hours || '1 hour',
-    studyDays: obData.days.length ? obData.days : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
-    focusAreas: obData.focusAreas,
-    studyStyle: obData.studyStyle || 'mixed',
-    coaching: obData.coaching,
-  };
-
-  applyTheme('light');
-  setObStep(11);
-
-  const GEN_STEPS = [
-    'reading report card',
-    'reading syllabus',
-    'analysing your data',
-    'generating your plan',
-    'building cs roadmap',
-    'finalising',
-  ];
-
-  const updateGen = (title, sub) => {
-    document.getElementById('ob-gen-title').textContent = title;
-    document.getElementById('ob-gen-sub').textContent = sub;
-  };
-
-  showGenStep(GEN_STEPS, 0);
-  let reportText = '';
-  let syllabusText = '';
-
-  if (!skipAI && apiKey && obReportFile) {
-    reportText = await extractFileText(obReportFile, 'report');
-  }
-  showGenStep(GEN_STEPS, 1);
-
-  if (!skipAI && apiKey && obSyllabusFile) {
-    syllabusText = await extractFileText(obSyllabusFile, 'syllabus');
-  }
-  showGenStep(GEN_STEPS, 2);
-
-  let plan = null;
-  if (!skipAI && apiKey) {
-    updateGen(`building ${name}'s plan…`, 'this takes about 15 seconds');
-    showGenStep(GEN_STEPS, 3);
-    try {
-      plan = await generatePlan(name, reportText, syllabusText, USER);
-    } catch(e) { console.error('Plan gen failed:', e); }
-    showGenStep(GEN_STEPS, 5);
-  }
-
-  if (!plan) {
-    updateGen('setting up your plan…', 'using our Cambridge template');
-    plan = getDefaultPlan(name);
-  }
-
-  USER.plan = plan;
-  USER.reportCardText = reportText;
-  USER.syllabusText = syllabusText;
-  S.set('mz-user', USER);
-
-  updateGen('all done!', '');
-  showGenStep(GEN_STEPS, 6);
-  await new Promise(r => setTimeout(r, 700));
-  launchApp();
-}
-
-/* ── Default plan (fallback if no AI / no key) ────────────────────────────── */
-function getDefaultPlan(name) {
+function defaultPlan(prefs) {
+  const { name } = prefs;
   return {
-    summary: `Welcome, ${name}! Your personalised plan covers all core Cambridge subjects with daily 1-hour self-study sessions. Focus areas are built around common Grade 8 challenge points — analytical writing, science depth, and mathematical reasoning.`,
+    summary: `Welcome, ${name}! Your personalised plan covers core Cambridge subjects with focused daily self-study. Tasks are built around common challenge points — analytical writing, science depth, and mathematical reasoning.`,
     days: {
-      1: { name: 'Monday', subjects: [
-        { name: 'English', color: '#FDE8D8', duration: '25 min', tasks: [
-          { text: 'Read one literary text not in your curriculum', mins: 15, detail: 'Choose a short story, essay, or poem 1-2 levels above class. Read slowly, annotate, and ask: what technique is the writer using?', generateContent: true },
-          { text: 'Write 5-8 lines of analytical response', mins: 10, detail: 'What is this text really about beneath the surface? Don\'t summarise — analyse the craft.' }
+      1: { name:'Monday', subjects:[
+        { name:'English', color:'#FDE8D8', duration:'25 min', tasks:[
+          { text:'Read one literary text not in your curriculum', mins:15, detail:'Choose a short story, essay, or poem 1-2 levels above class. Read slowly and annotate. Ask: what technique is the writer using?', generateContent:true },
+          { text:'Write 5-8 lines of analytical response', mins:10, detail:"What is this text really about beneath the surface? Don't summarise — analyse the craft." }
         ]},
-        { name: 'History', color: '#F0E8D4', duration: '35 min', tasks: [
-          { text: 'Find one primary source on this week\'s topic', mins: 15, detail: 'Wikisource has free primary documents. Read slowly. Ask: who wrote this, when, and why does their position matter?' },
-          { text: 'Write OPCVL analysis', mins: 10, detail: 'Origin, Purpose, Content, Value, Limitation. What does this source tell us as evidence? Why might it be incomplete?' },
-          { text: 'Connect source to the bigger historical argument', mins: 10, detail: 'How does this source fit the main historical narrative? Does it support or challenge the dominant explanation?' }
+        { name:'History', color:'#F0E8D4', duration:'35 min', tasks:[
+          { text:'Find one primary source on this week\'s topic', mins:15, detail:'Wikisource has free primary documents. Read slowly. Ask: who wrote this, when, and why does their position matter?' },
+          { text:'Write OPCVL analysis', mins:10, detail:'Origin, Purpose, Content, Value, Limitation. What does this source tell us? Why might it be limited?' },
+          { text:'Connect source to the bigger argument', mins:10, detail:'How does this source fit the main historical narrative? Be specific — cite it.' }
         ]}
       ]},
-      2: { name: 'Tuesday', subjects: [
-        { name: 'Mathematics', color: '#E0F0FF', duration: '35 min', tasks: [
-          { text: 'Attempt 2-3 harder problems without examples', mins: 10, detail: 'Struggle productively — 5 minutes of real struggle before seeking a hint is how learning happens.', generateContent: true },
-          { text: 'Prove why one rule from this week works', mins: 15, detail: 'Don\'t accept rules without understanding. Example: why does a negative index give a reciprocal? Prove it from the pattern.' },
-          { text: 'Find a second more elegant solution', mins: 10, detail: 'After solving one way, ask: is there a shorter path? Finding a second method deepens understanding more than two new problems.' }
+      2: { name:'Tuesday', subjects:[
+        { name:'Mathematics', color:'#E0F0FF', duration:'35 min', tasks:[
+          { text:'Attempt 2-3 harder problems without examples', mins:15, detail:'Struggle productively — 5 minutes of genuine effort before any hint. The discomfort is the mechanism.', generateContent:true },
+          { text:'Prove why one rule from this week works', mins:15, detail:"Don't accept rules without understanding. Example: why does a negative index give a reciprocal? Prove from the pattern." },
+          { text:'Error journal: categorise any mistakes', mins:5, detail:'Categories: conceptual misunderstanding / careless arithmetic / question misread. Patterns across errors are more useful than individual corrections.' }
         ]},
-        { name: 'Physics', color: '#E8E0F8', duration: '25 min', tasks: [
-          { text: 'Solve today\'s physics problems', mins: 25, detail: 'Read every question TWICE before touching a pen. Explain the physical principle before calculating.', generateContent: true }
+        { name:'Physics', color:'#E8E0F8', duration:'25 min', tasks:[
+          { text:'Read each question TWICE before touching a pen', detail:'Most careless errors come from misreading, not from not knowing. Two reads costs 10 seconds.' },
+          { text:'Solve today\'s problems', mins:25, detail:'Explain the physical principle before calculating. Estimate the answer before working it out.', generateContent:true }
         ]}
       ]},
-      3: { name: 'Wednesday', subjects: [
-        { name: 'CS', color: '#DCF4E8', duration: '35 min', tasks: [
-          { text: 'Write a 3-sentence summary from memory', mins: 5, detail: 'Close all notes. Write 3 sentences explaining last session\'s concept from memory. If you can\'t, go back before moving on.' },
-          { text: 'Work through this week\'s CS topic', mins: 20, detail: 'Trace the algorithm on paper first, then code. Never copy — type from your understanding.', generateContent: true },
-          { text: 'CS trace: algorithm by hand on paper', mins: 10, detail: 'No code. Paper, step by step, 5-6 elements. Understanding logic before code is what makes debugging easy.' }
+      3: { name:'Wednesday', subjects:[
+        { name:'CS', color:'#DCF4E8', duration:'35 min', tasks:[
+          { text:'3-sentence summary from memory, no notes', mins:5, detail:"Close everything. Write 3 sentences from memory. If you can't, go back before moving forward." },
+          { text:'Work through this week\'s CS fundamentals topic', mins:20, detail:'Trace the algorithm on paper first. Then code. Never copy — type from understanding.', generateContent:true },
+          { text:'Trace algorithm by hand on 5-6 elements', mins:10, detail:'No code. Paper only. Understanding logic before writing code is what makes debugging easy.' }
         ]},
-        { name: 'Chemistry', color: '#FDE8EE', duration: '25 min', tasks: [
-          { text: 'Work through today\'s chemistry topic', mins: 15, detail: 'Read every question TWICE. Underline the command word. Answer only what it asks.', generateContent: true },
-          { text: 'Attempt one past paper question', mins: 10, detail: 'Use command words: describe (what happens), explain (why), compare (both similarities AND differences).' }
+        { name:'Chemistry', color:'#FDE8EE', duration:'25 min', tasks:[
+          { text:'Work through today\'s Chemistry topic', mins:15, detail:'Read every question twice. Underline the command word. Answer only what it asks.', generateContent:true },
+          { text:'Attempt one past paper question', mins:10, detail:'describe=what happens, explain=why, compare=similarities AND differences.' }
         ]}
       ]},
-      4: { name: 'Thursday', subjects: [
-        { name: 'Biology', color: '#E0F4EC', duration: '30 min', tasks: [
-          { text: 'Go one level deeper than the textbook', mins: 15, detail: 'For photosynthesis: what actually happens in the light-dependent stage? A-level content is accessible at Grade 8 if explained well.', generateContent: true },
-          { text: 'Draw and label full diagram from memory', mins: 10, detail: 'No looking. Draw from scratch. Mark every gap in red. Gaps = spend 5 min on precisely those.' },
-          { text: 'Find one real-world research connection', mins: 5, detail: 'Science Daily or BBC Science. Find one article connected to this week\'s topic. Write one sentence on what it adds.' }
+      4: { name:'Thursday', subjects:[
+        { name:'Biology', color:'#E0F4EC', duration:'30 min', tasks:[
+          { text:'Go one level deeper than the textbook', mins:15, detail:'A-level content is accessible at Grade 8 if explained well. For photosynthesis: what actually happens in the light-dependent stage?', generateContent:true },
+          { text:'Draw and label full diagram from memory', mins:10, detail:'No looking. Draw from scratch. Mark every gap in red. Gaps = spend 5 min on precisely those parts.' },
+          { text:'Find one real-world connection', mins:5, detail:'Science Daily or BBC Science. One article connected to this week\'s topic.' }
         ]},
-        { name: 'Geography', color: '#E8F4DC', duration: '30 min', tasks: [
-          { text: 'Find one current news story on this week\'s topic', mins: 10, detail: 'Write 3-4 sentences arguing a position — not just describing. Use geographical terminology.' },
-          { text: 'Draw country/region outline from memory', mins: 10, detail: 'No atlas. Draw the outline, mark physical features relevant to this week\'s topic. Check accuracy after.' },
-          { text: 'Connection journal: link Biology to Geography', mins: 10, detail: 'Push beyond the obvious. These cross-subject connections appear in top-grade exam responses.' }
+        { name:'Geography', color:'#E8F4DC', duration:'30 min', tasks:[
+          { text:'Find one current news story on this week\'s topic', mins:10, detail:'Write 3-4 sentences arguing a position — not just describing. Use geographical terminology.' },
+          { text:'Draw key map features from memory', mins:10, detail:'No atlas. Outline + physical features relevant to this week. Check accuracy after.' },
+          { text:'Connection journal: Biology ↔ Geography', mins:10, detail:'Push beyond the obvious. These cross-subject connections appear in top-grade responses.' }
         ]}
       ]},
-      5: { name: 'Friday', subjects: [
-        { name: 'French', color: '#E0EEF8', duration: '25 min', tasks: [
-          { text: 'Today\'s listening and immersion task', mins: 10, detail: 'TV5Monde, Coffee Break French, or InnerFrench podcast. Authentic exposure to real French is irreplaceable.', generateContent: true },
-          { text: 'Write 6-8 original sentences using this week\'s tense', mins: 10, detail: 'Original sentences from your own thinking, not translations. One sophisticated sentence beats three simple ones.' },
-          { text: 'Go deep on one grammar rule', mins: 5, detail: 'The logic behind grammar rules is more memorable than rote learning. Why does it work this way?' }
+      5: { name:'Friday', subjects:[
+        { name:'French', color:'#E0EEF8', duration:'25 min', tasks:[
+          { text:'Today\'s listening and immersion', mins:10, detail:'TV5Monde, Coffee Break French, or InnerFrench. Authentic exposure is irreplaceable.', generateContent:true },
+          { text:'Write 6-8 original sentences using this week\'s tense', mins:10, detail:'Original sentences from your own thinking. One sophisticated sentence beats three simple ones.' },
+          { text:'Go deep on one grammar rule — understand the logic', mins:5, detail:'The logic behind grammar rules is more memorable than rote learning. Why does it work this way?' }
         ]},
-        { name: 'CS', color: '#DCF4E8', duration: '35 min', tasks: [
-          { text: 'Build and time this week\'s CS implementation', mins: 20, detail: 'Implement, then time on arrays of 10/100/1000. Does timing match Big-O theory?', generateContent: true },
-          { text: 'Ask "why does this work?" one level deeper', mins: 10, detail: 'For binary search: why must the array be sorted? Understanding preconditions separates good programmers.' },
-          { text: 'Set 3 specific measurable goals for next week', mins: 5, detail: 'Not "do better" but "implement selection sort and time it on 3 array sizes." Goals without specificity are wishes.' }
+        { name:'CS', color:'#DCF4E8', duration:'35 min', tasks:[
+          { text:'Build and time this week\'s CS implementation', mins:20, detail:'Implement, then time on arrays of 10/100/1000. Does timing match Big-O theory?', generateContent:true },
+          { text:'Ask "why does this work?" one level deeper', mins:10, detail:"For binary search: why must the array be sorted? Understanding preconditions separates programmers." },
+          { text:'Set 3 specific measurable goals for next week', mins:5, detail:'Not "do better" but "implement selection sort and time it on 3 array sizes."' }
         ]}
       ]},
-      6: { name: 'Saturday', subjects: [
-        { name: 'Project', color: '#EDF5E9', duration: '60 min', tasks: [
-          { text: 'Re-read project brief — what is today\'s specific deliverable?', mins: 5, detail: 'Don\'t start until you can answer in one sentence: "By the end of today I will have..."' },
-          { text: 'First 25-min work block: substance only', mins: 25, detail: 'Resist polishing before it\'s good. First two Saturdays: build. Last two: refine.' },
-          { text: '5-min break', mins: 5, detail: 'Actually stop. The break is part of the method.' },
-          { text: 'Second 25-min work block: continue building', mins: 25, detail: 'Push through to completion of today\'s deliverable.' },
-          { text: 'Write 2 sentences: what you did + next Saturday\'s step', mins: 5, detail: 'Prevents starting from zero each week. Be specific.' }
+      6: { name:'Saturday', subjects:[
+        { name:'Project', color:'#EDF5E9', duration:'60 min', tasks:[
+          { text:"Re-read project brief — what is today's specific deliverable?", mins:5, detail:'Answer in one sentence: "By the end of today I will have…"' },
+          { text:'First 25-min block: substance only, no polishing', mins:25, detail:'Resist making it look good before it is good.' },
+          { text:'5-min break', mins:5, detail:'Actually stop. The break is part of the method.' },
+          { text:'Second 25-min block: continue building', mins:25, detail:'Push through to completion of today\'s deliverable.' },
+          { text:'Write 2 sentences: what you did + next Saturday\'s step', mins:5, detail:'Prevents starting from zero each week. Be specific.' }
         ]}
       ]}
     },
     csRoadmap: [
-      { month: 'June', theme: 'how computers actually work', weeks: [
-        { range: 'Wk 1-2', title: 'Binary and data representation', description: 'Number systems from first principles — why binary? How integers, text (ASCII/Unicode), and colours (RGB) are stored. Convert manually: decimal ↔ binary ↔ hexadecimal. Implement a converter in Python.' },
-        { range: 'Wk 3-4', title: 'Logic gates and Boolean algebra', description: 'AND, OR, NOT, NAND, NOR, XOR — understand as physical gates. Boolean algebra: simplify using De Morgan\'s laws. Build truth tables. Show how a half-adder is built from logic gates.' }
-      ], resources: ['CS50 Week 0 by Harvard (free)', 'Ben Eater on YouTube — "Building an 8-bit computer"', 'nand2tetris.org'] },
-      { month: 'July', theme: 'algorithms: the science of solving problems efficiently', weeks: [
-        { range: 'Wk 5-6', title: 'Sorting algorithms', description: 'Implement bubble sort, selection sort, and insertion sort from scratch — no built-in sort. For each: trace on paper first, then code, then count comparisons and swaps.' },
-        { range: 'Wk 7-8', title: 'Searching and Big-O', description: 'Linear search vs binary search. Implement both, time them on arrays of 100/1000/10000. Plot results. Introduce Big-O notation intuitively: O(n) vs O(log n).' }
-      ], resources: ['"Grokking Algorithms" by Aditya Bhargava — Ch 1-4', 'CS50 Week 3 — Algorithms', 'Visualgo.net — algorithm animations'] },
-      { month: 'August', theme: 'data structures: organising information', weeks: [
-        { range: 'Wk 9-10', title: 'Arrays, linked lists, stacks, queues', description: 'Why is array random access O(1) but insertion O(n)? Implement a stack (LIFO) and queue (FIFO). Use your stack to check for balanced parentheses.' },
-        { range: 'Wk 11-12', title: 'Hash tables and trees', description: 'How does Python\'s dictionary achieve O(1) lookup? What is a hash function? Binary search trees — implement insert and search.' }
-      ], resources: ['"Grokking Algorithms" Ch 5 and 7', 'CS50 Week 5 — Data Structures', 'Python Tutor — pythontutor.com'] },
-      { month: 'September', theme: 'programming depth: recursion and dynamic programming', weeks: [
-        { range: 'Wk 13-14', title: 'Recursion and the call stack', description: 'What happens in memory when a function calls itself? Implement factorial and Fibonacci recursively. Use Python Tutor to watch the call stack grow and shrink.' },
-        { range: 'Wk 15-16', title: 'Dynamic programming introduction', description: 'Memoization: add caching to recursive Fibonacci. Measure performance for n=40 vs naive. Solve 3-5 Project Euler problems.' }
-      ], resources: ['CS50 Week 4 — Memory', '"Grokking Algorithms" Ch 9 — Dynamic Programming', 'projecteuler.net'] }
+      { month:'June', theme:'how computers actually work', weeks:[
+        { range:'Wk 1-2', title:'Binary and data representation', description:'Number systems from first principles. How integers, text (ASCII), and colours (RGB) are stored as binary. Convert manually: decimal ↔ binary ↔ hex. Implement a converter in Python without built-in functions.' },
+        { range:'Wk 3-4', title:'Logic gates and Boolean algebra', description:'AND, OR, NOT, NAND, NOR, XOR — understood as physical transistors, not just symbols. Build truth tables. Simplify using De Morgan\'s laws. Show how a half-adder is built from logic gates.' }
+      ], resources:['CS50 Week 0 — Harvard (free)','Ben Eater on YouTube — 8-bit computer series','nand2tetris.org'] },
+      { month:'July', theme:'algorithms: solving problems efficiently', weeks:[
+        { range:'Wk 5-6', title:'Sorting algorithms', description:'Implement bubble sort, selection sort, and insertion sort from scratch — no built-in sort. For each: trace through 5 elements on paper first, then code, then count comparisons and swaps. Why is insertion sort better on nearly-sorted data?' },
+        { range:'Wk 7-8', title:'Searching and Big-O notation', description:'Linear search vs binary search. Implement both, time them on 100/1000/10000 elements. Plot results. Big-O intuitively: O(n) vs O(log n). Prove why binary search requires a sorted array.' }
+      ], resources:['"Grokking Algorithms" by Aditya Bhargava — Ch 1-4','CS50 Week 3 — Algorithms','Visualgo.net — algorithm animations'] },
+      { month:'August', theme:'data structures: organising information', weeks:[
+        { range:'Wk 9-10', title:'Arrays, linked lists, stacks, queues', description:'Why is array random access O(1) but insertion O(n)? Implement a stack (LIFO) and queue (FIFO) from scratch. Use your stack to check for balanced parentheses in an expression.' },
+        { range:'Wk 11-12', title:'Hash tables and trees', description:'How does Python\'s dict achieve O(1) lookup? What is a hash function? What is a collision? Binary search trees: implement insert and search. Where do trees appear in real systems?' }
+      ], resources:['"Grokking Algorithms" Ch 5 and 7','CS50 Week 5 — Data Structures','pythontutor.com — visualise memory'] },
+      { month:'September', theme:'programming depth: recursion and dynamic programming', weeks:[
+        { range:'Wk 13-14', title:'Recursion and the call stack', description:'What actually happens in memory when a function calls itself? Implement factorial and Fibonacci recursively. Use Python Tutor to watch the call stack. When is recursion elegant, when is it dangerous?' },
+        { range:'Wk 15-16', title:'Dynamic programming introduction', description:'Memoization: add caching to recursive Fibonacci. Measure performance for n=40 vs naive. Tabulation vs memoization. Solve 3-5 Project Euler problems combining CS and Maths.' }
+      ], resources:['CS50 Week 4 — Memory','"Grokking Algorithms" Ch 9 — DP','projecteuler.net','LeetCode — Easy problems'] }
     ],
     projects: [
-      { month: 'June', title: 'Binary calculator', subjects: ['CS', 'Mathematics'], description: 'Build a binary calculator in Python using only bit manipulation — no arithmetic operators. Implement addition using AND, OR, XOR, and left shift. Forces you to understand how a CPU\'s ALU actually works.', steps: ['Understand binary addition by hand. Research half-adder and full adder.', 'Implement a half-adder in Python using only bitwise operators. Test all 4 input combinations.', 'Build a full-adder. Chain 8 full-adders to make an 8-bit adder. Test.', 'Implement binary subtraction using two\'s complement. Write 300-word explanation.'], deliverable: 'Working Python implementation + 300-word technical explanation' },
-      { month: 'July', title: 'The physics of music', subjects: ['Physics', 'Mathematics', 'English'], description: 'Investigate the science of a musical instrument — how strings/air columns produce specific notes, what determines pitch and loudness. Choose any instrument you know.', steps: ['Research: how does a vibrating string produce a standing wave? What are harmonics?', 'Mathematics: A4 = 440Hz. Calculate every note in one octave using f × 2^(n/12). Graph it.', 'Comparison: compare sound production in two different instruments.', 'Write a 400-word scientific report with labelled diagram and frequency graph.'], deliverable: '400-word scientific report + frequency graph' },
-      { month: 'August', title: 'Home lab: photosynthesis and light', subjects: ['Biology', 'Chemistry', 'Mathematics'], description: 'Design and conduct a real experiment testing how light intensity affects photosynthesis rate. Use the floating leaf disk method with spinach and sodium bicarbonate.', steps: ['Design: write hypothesis, identify variables, write a replicable method.', 'Conduct: run at 3-4 light distances. At least 3 repeated trials per condition.', 'Analyse: calculate averages, create line graph, identify trends and anomalies.', 'Write full lab report: hypothesis, method, results, conclusion, evaluation.'], deliverable: 'Full scientific lab report' },
-      { month: 'September', title: 'A voice from history', subjects: ['English', 'History'], description: 'Write a 500-word realistic fiction piece from the perspective of a young person your age during a major historical event from your syllabus. Historically accurate, using literary techniques.', steps: ['Research: choose one specific historical event. Research daily life for ordinary people, not leaders.', 'Outline: character, setting, conflict, resolution.', 'First draft: write complete story beginning to end without stopping to perfect.', 'Revise + 150-word author\'s note explaining historical facts and literary techniques used.'], deliverable: '500-word story + 150-word author\'s note' }
+      { month:'June', title:'Binary calculator', subjects:['CS','Mathematics'], description:'Build a binary calculator in Python using only bit manipulation — no arithmetic operators. Implement addition using AND, OR, XOR, and left shift. Forces you to understand how a CPU\'s ALU actually works.', steps:['Understand binary addition by hand. Research half-adder and full adder circuits.','Implement a half-adder in Python using only bitwise operators. Test all 4 input combinations.','Build a full-adder. Chain 8 full-adders to make an 8-bit adder. Test thoroughly.','Implement binary subtraction using two\'s complement. Write a 300-word explanation of why computers use it.'], deliverable:'Working Python implementation + 300-word technical explanation' },
+      { month:'July', title:'The physics of music', subjects:['Physics','Mathematics','English'], description:'Investigate the science of a musical instrument of your choice — how strings or air columns produce specific notes, what determines pitch and loudness. Connect Physics, Maths, and technical writing.', steps:['Research: how does a vibrating string produce a standing wave? What are harmonics and overtones?','Mathematics: using f × 2^(n/12), calculate every note in one octave starting from A4=440Hz. Graph it.','Comparison: compare sound production in two different instruments. What physical differences explain different timbres?','Write a 400-word scientific report with labelled diagram and frequency graph.'], deliverable:'400-word scientific report + frequency graph' },
+      { month:'August', title:'Home lab: photosynthesis', subjects:['Biology','Chemistry','Mathematics'], description:'Design and conduct a real experiment testing how light intensity affects photosynthesis rate. Use the floating leaf disk method with spinach and sodium bicarbonate — inexpensive and genuinely works at home.', steps:['Design: write hypothesis, identify variables, write a method specific enough to replicate.','Conduct: run at 3-4 light distances. At least 3 repeated trials per condition. Record data properly.','Analyse: calculate averages, create a line graph, identify trends and anomalies. Does data support hypothesis?','Write full lab report: hypothesis, method, results (table + graph), conclusion, evaluation.'], deliverable:'Full scientific lab report' },
+      { month:'September', title:'A voice from history', subjects:['English','History'], description:'Write a 500-word realistic fiction piece from the perspective of a young person your age during a major historical event from your syllabus. Historically accurate, using at least 3 literary techniques.', steps:['Research: choose one specific event. Research daily life for ordinary people, not leaders.','Outline: character, setting, conflict (internal/external), resolution.','First draft: write the complete story beginning to end without stopping to perfect.','Revise + 150-word author\'s note: which historical facts did you include? Which techniques did you use deliberately?'], deliverable:"500-word story + 150-word author's note" }
     ]
   };
 }
 
-/* ── App init ─────────────────────────────────────────────────────────────── */
+/* ── Onboarding ────────────────────────────────────────── */
+let obData = { grade:'Grade 8', hours:'1 hour', days:[], focus:[], style:'', coaching:'' };
+let obReportFile = null, obSyllabusFile = null, obExistingFile = null;
+let obHasExisting = false;
+let obCurrentStep = 1;
+const OB_TOTAL = 12;
+
+function obProgress(step) {
+  document.getElementById('ob-progress-fill').style.width = `${((step-1)/(OB_TOTAL-1))*100}%`;
+}
+
+function obGo(id) {
+  document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) { el.classList.add('active'); obCurrentStep = parseInt(id.replace('ob-s','')) || obCurrentStep; }
+  obProgress(obCurrentStep);
+}
+
+function obChipSingle(wrapperId, onPick) {
+  document.querySelectorAll(`#${wrapperId} .ob-chip`).forEach(c => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll(`#${wrapperId} .ob-chip`).forEach(x => x.classList.remove('sel'));
+      c.classList.add('sel');
+      if (onPick) onPick(c.dataset.val);
+    });
+  });
+}
+
+function obChipMulti(wrapperId) {
+  document.querySelectorAll(`#${wrapperId} .ob-chip`).forEach(c => {
+    c.addEventListener('click', () => c.classList.toggle('sel'));
+  });
+}
+
+function obSelectedSingle(wrapperId) {
+  return document.querySelector(`#${wrapperId} .ob-chip.sel`)?.dataset.val || null;
+}
+
+function obSelectedMulti(wrapperId) {
+  return [...document.querySelectorAll(`#${wrapperId} .ob-chip.sel`)].map(c => c.dataset.val);
+}
+
+function initOnboarding() {
+  // Step 1: name
+  const nameIn = document.getElementById('ob-name');
+  document.getElementById('ob-n1').addEventListener('click', () => {
+    const v = nameIn.value.trim();
+    if (!v) { nameIn.focus(); return; }
+    obGo('ob-s2');
+  });
+  nameIn.addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('ob-n1').click(); });
+
+  // Step 2: fork
+  document.getElementById('ob-fork-yes').addEventListener('click', () => {
+    obHasExisting = true;
+    obCurrentStep = 3;
+    obGo('ob-s3a');
+  });
+  document.getElementById('ob-fork-no').addEventListener('click', () => {
+    obHasExisting = false;
+    obCurrentStep = 3;
+    obGo('ob-s3b');
+  });
+
+  // Step 3a: upload existing
+  document.getElementById('ob-existing-file').addEventListener('change', e => {
+    obExistingFile = e.target.files[0];
+    if (obExistingFile) document.getElementById('ob-existing-name').textContent = obExistingFile.name;
+  });
+  document.getElementById('ob-n3a').addEventListener('click', () => {
+    obCurrentStep = 11; obGo('ob-s11');
+  });
+
+  // Step 3b: grade
+  obChipSingle('ob-grade-chips', v => obData.grade = v);
+  document.getElementById('ob-n3b').addEventListener('click', () => {
+    obData.grade = obSelectedSingle('ob-grade-chips') || 'Grade 8';
+    obCurrentStep = 4; obGo('ob-s4');
+  });
+
+  // Step 4: hours
+  obChipSingle('ob-hours-chips');
+  document.getElementById('ob-n4').addEventListener('click', () => {
+    const custom = document.getElementById('ob-hours-custom').value.trim();
+    obData.hours = custom || obSelectedSingle('ob-hours-chips') || '1 hour';
+    obCurrentStep = 5; obGo('ob-s5');
+  });
+
+  // Step 5: days
+  obChipMulti('ob-days-chips');
+  document.getElementById('ob-n5').addEventListener('click', () => {
+    const sel = obSelectedMulti('ob-days-chips');
+    obData.days = sel.length ? sel : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    obCurrentStep = 6; obGo('ob-s6');
+  });
+
+  // Step 6: focus
+  obChipMulti('ob-focus-chips');
+  document.getElementById('ob-n6').addEventListener('click', () => {
+    obData.focus = obSelectedMulti('ob-focus-chips');
+    obCurrentStep = 7; obGo('ob-s7');
+  });
+  document.getElementById('ob-skip6').addEventListener('click', () => { obCurrentStep = 7; obGo('ob-s7'); });
+
+  // Step 7: style
+  obChipSingle('ob-style-chips');
+  document.getElementById('ob-n7').addEventListener('click', () => {
+    obData.style = obSelectedSingle('ob-style-chips') || 'mixed';
+    obCurrentStep = 8; obGo('ob-s8');
+  });
+
+  // Step 8: coaching
+  document.getElementById('ob-n8').addEventListener('click', () => {
+    obData.coaching = document.getElementById('ob-coaching').value.trim();
+    obCurrentStep = 9; obGo('ob-s9');
+  });
+  document.getElementById('ob-skip8').addEventListener('click', () => { obCurrentStep = 9; obGo('ob-s9'); });
+
+  // Step 9: report card
+  document.getElementById('ob-report-file').addEventListener('change', e => {
+    obReportFile = e.target.files[0];
+    if (obReportFile) document.getElementById('ob-report-name').textContent = obReportFile.name;
+  });
+  document.getElementById('ob-n9').addEventListener('click', () => { obCurrentStep = 10; obGo('ob-s10'); });
+  document.getElementById('ob-skip9').addEventListener('click', () => { obReportFile = null; obCurrentStep = 10; obGo('ob-s10'); });
+
+  // Step 10: syllabus
+  document.getElementById('ob-syllabus-file').addEventListener('change', e => {
+    obSyllabusFile = e.target.files[0];
+    if (obSyllabusFile) document.getElementById('ob-syllabus-name').textContent = obSyllabusFile.name;
+  });
+  document.getElementById('ob-n10').addEventListener('click', () => { obCurrentStep = 11; obGo('ob-s11'); });
+  document.getElementById('ob-skip10').addEventListener('click', () => { obSyllabusFile = null; obCurrentStep = 11; obGo('ob-s11'); });
+
+  // Step 11: API key
+  document.getElementById('ob-n11').addEventListener('click', () => kickoffGeneration());
+  document.getElementById('ob-skip11').addEventListener('click', () => kickoffGeneration(true));
+}
+
+function genStep(steps, idx) {
+  const el = document.getElementById('ob-gen-list');
+  if (!el) return;
+  el.innerHTML = steps.map((s,i) => {
+    const cls = i < idx ? 'done' : i === idx ? 'active' : '';
+    return `<div class="ob-gen-row ${cls}"><div class="ob-gen-dot"></div>${s}</div>`;
+  }).join('');
+}
+
+async function kickoffGeneration(skipAI = false) {
+  const name = document.getElementById('ob-name').value.trim() || 'Student';
+  const apiKey = document.getElementById('ob-apikey').value.trim();
+
+  USER = {
+    name, apiKey: skipAI ? '' : apiKey,
+    theme: 'light',
+    grade: obData.grade,
+    hours: obData.hours,
+    days: obData.days.length ? obData.days : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+    focus: obData.focus,
+    style: obData.style,
+    coaching: obData.coaching,
+  };
+
+  applyTheme('light');
+  obCurrentStep = 12;
+  obGo('ob-s12');
+
+  const STEPS = ['reading documents','analysing your data','generating your plan','building cs roadmap','finishing up'];
+  genStep(STEPS, 0);
+
+  let existingText = '', reportText = '', syllabusText = '';
+
+  if (!skipAI && apiKey) {
+    if (obHasExisting && obExistingFile) {
+      genStep(STEPS, 0);
+      existingText = await extractDoc(obExistingFile, 'existing');
+    }
+    if (obReportFile) {
+      genStep(STEPS, 0);
+      reportText = await extractDoc(obReportFile, 'report');
+    }
+    if (obSyllabusFile) {
+      genStep(STEPS, 1);
+      syllabusText = await extractDoc(obSyllabusFile, 'syllabus');
+    }
+    genStep(STEPS, 2);
+    document.getElementById('ob-gen-h').textContent = `building ${name}'s plan…`;
+  }
+
+  let plan = null;
+  if (!skipAI && apiKey) {
+    try {
+      plan = await generatePlan(
+        { name, grade: USER.grade, hours: USER.hours, days: USER.days, focus: USER.focus, style: USER.style, coaching: USER.coaching },
+        reportText, syllabusText, existingText
+      );
+    } catch(e) { console.error(e); }
+    genStep(STEPS, 4);
+  }
+
+  if (!plan) plan = defaultPlan({ name });
+
+  USER.plan = plan;
+  USER.reportText = reportText;
+  USER.syllabusText = syllabusText;
+  S.set('mz', USER);
+
+  document.getElementById('ob-gen-h').textContent = 'all done!';
+  document.getElementById('ob-gen-sub').textContent = '';
+  genStep(STEPS, 5);
+  await new Promise(r => setTimeout(r, 600));
+  launchApp();
+}
+
+/* ── App ───────────────────────────────────────────────── */
 function launchApp() {
   document.getElementById('onboarding').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
+  document.getElementById('app').style.display = 'grid';
   applyTheme(USER.theme || 'light');
-  document.getElementById('header-greeting').textContent = `hey, ${USER.name.toLowerCase()}`;
+  document.getElementById('sidebar-greeting').textContent = `hey, ${USER.name.toLowerCase()}`;
   initTabs();
   initSession();
   initPlan();
-  initCSRoadmap();
+  initCS();
   initProjects();
   initSettings();
   renderStreak();
   initCountdown();
 }
 
-/* ── Theme ────────────────────────────────────────────────────────────────── */
-function applyTheme(theme) {
-  document.body.setAttribute('data-theme', theme);
-  if (USER) { USER.theme = theme; S.set('mz-user', USER); }
-  document.querySelectorAll('.theme-swatch').forEach(s => {
-    s.classList.toggle('active', s.dataset.theme === theme);
-  });
+function applyTheme(t) {
+  document.body.setAttribute('data-theme', t);
+  if (USER) { USER.theme = t; S.set('mz', USER); }
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === t));
 }
 
-/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+/* ── Tabs ──────────────────────────────────────────────── */
 function initTabs() {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`tab-${btn.dataset.tab}`)?.classList.add('active');
-      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    });
+  function activate(tab) {
+    document.querySelectorAll('.nav-item,.mob-nav').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.tab').forEach(s => s.classList.toggle('active', s.id === `tab-${tab}`));
+  }
+  document.querySelectorAll('.nav-item,.mob-nav').forEach(b => {
+    b.addEventListener('click', () => activate(b.dataset.tab));
   });
 }
 
-/* ── Session: Today card ─────────────────────────────────────────────────── */
+/* ── Session ───────────────────────────────────────────── */
 function initSession() {
   const now = new Date();
   let dow = now.getDay();
-  if (dow === 0) dow = 1; // Sunday → show Monday
-  const day = USER.plan.days[dow] || USER.plan.days[1];
+  if (dow === 0) dow = 1;
+  const day = USER.plan.days[dow] || USER.plan.days[Object.keys(USER.plan.days)[0]];
 
-  document.getElementById('today-day-name').textContent = day.name.toLowerCase();
-  document.getElementById('today-date').textContent = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  document.getElementById('today-day').textContent = day.name.toLowerCase();
+  document.getElementById('today-date-str').textContent = now.toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' });
 
-  const subjEl = document.getElementById('today-subjects');
-  subjEl.innerHTML = day.subjects.map(s => `
+  const sl = document.getElementById('today-subjects-list');
+  sl.innerHTML = day.subjects.map(s => `
     <div class="today-subject-row">
-      <span class="subject-chip" style="background:${s.color};color:#333">${s.name}</span>
-      <span style="font-size:0.72rem;color:var(--text-muted);font-family:'DM Mono',monospace">${s.duration}</span>
-    </div>
-  `).join('');
+      <span class="subj-chip" style="background:${s.color};color:#333">${s.name}</span>
+      <span style="font-size:0.68rem;color:var(--tx-3);font-family:'JetBrains Mono',monospace">${s.duration}</span>
+    </div>`).join('');
 
   document.getElementById('go-today-btn').addEventListener('click', () => {
-    document.querySelector('[data-tab="plan"]').click();
-    setTimeout(() => {
-      document.querySelector(`.day-tab[data-day="${dow}"]`)?.click();
-    }, 100);
+    document.querySelector('[data-tab="plan"]')?.click();
+    setTimeout(() => document.querySelector(`.day-tab[data-day="${dow}"]`)?.click(), 100);
   });
 
   initTimer();
   initChecklist(dow, day);
-  initDetailCard();
+  initDetail();
   initMusic();
 }
 
-/* ── Countdown ────────────────────────────────────────────────────────────── */
+/* ── Countdown ─────────────────────────────────────────── */
 function initCountdown() {
-  const TERM_START = new Date('2026-06-01');
-  const TERM_END   = new Date('2026-09-26');
-  const now        = new Date();
-  const totalMs    = TERM_END - TERM_START;
-  const leftMs     = Math.max(0, TERM_END - now);
-  const elapsedMs  = Math.max(0, now - TERM_START);
-  const daysLeft   = Math.ceil(leftMs / 86400000);
-  const weeksLeft  = (leftMs / (7 * 86400000)).toFixed(1);
-  const pct        = Math.min(100, Math.round((elapsedMs / totalMs) * 100));
-
-  document.getElementById('cd-days').textContent  = daysLeft;
-  document.getElementById('cd-weeks').textContent = weeksLeft;
-  document.getElementById('cd-pct').textContent   = pct;
-  document.getElementById('cd-bar').style.width   = pct + '%';
-  document.getElementById('cd-meta').textContent  =
-    now < TERM_START ? `starts ${TERM_START.toLocaleDateString('en-IN', { day:'numeric', month:'long' })}`
-    : now > TERM_END ? 'term 1 ended'
-    : `ends ${TERM_END.toLocaleDateString('en-IN', { day:'numeric', month:'long' })}`;
+  const START = new Date('2026-06-01'), END = new Date('2026-09-26'), NOW = new Date();
+  const total = END - START, left = Math.max(0, END - NOW), elapsed = Math.max(0, NOW - START);
+  const days = Math.ceil(left / 86400000), weeks = (left / (7*86400000)).toFixed(1), pct = Math.min(100, Math.round((elapsed/total)*100));
+  document.getElementById('cd-days').textContent = days;
+  document.getElementById('cd-weeks').textContent = weeks;
+  document.getElementById('cd-pct').textContent = pct;
+  document.getElementById('cd-bar').style.width = pct + '%';
+  document.getElementById('cd-meta').textContent = NOW < START ? `starts ${START.toLocaleDateString('en-IN',{day:'numeric',month:'long'})}` : NOW > END ? 'term 1 ended' : `ends ${END.toLocaleDateString('en-IN',{day:'numeric',month:'long'})}`;
 }
 
-/* ── Streak ───────────────────────────────────────────────────────────────── */
-function getStreak() { return S.get('mz-streak') || { days: [], current: 0, best: 0 }; }
-
-function markDayComplete() {
-  const streak = getStreak();
-  const today  = new Date().toDateString();
-  if (streak.days.includes(today)) return;
-  streak.days.push(today);
-  let count = 0;
-  const d = new Date();
-  while (streak.days.includes(d.toDateString())) { count++; d.setDate(d.getDate() - 1); }
-  streak.current = count;
-  streak.best = Math.max(streak.best || 0, count);
-  S.set('mz-streak', streak);
-  renderStreak();
+/* ── Streak ────────────────────────────────────────────── */
+function getStreak() { return S.get('mz-streak') || { days:[], current:0, best:0 }; }
+function markDay() {
+  const st = getStreak(), today = new Date().toDateString();
+  if (st.days.includes(today)) return;
+  st.days.push(today);
+  let c = 0; const d = new Date();
+  while (st.days.includes(d.toDateString())) { c++; d.setDate(d.getDate()-1); }
+  st.current = c; st.best = Math.max(st.best||0, c);
+  S.set('mz-streak', st); renderStreak();
 }
-
 function renderStreak() {
-  const el = document.getElementById('streak-display');
-  if (!el) return;
-  const streak = getStreak();
-  const lit = streak.days.includes(new Date().toDateString());
-  el.innerHTML = `<span class="flame ${lit ? 'lit' : ''}">🔥</span><span class="streak-num-sm">${streak.current}</span><span style="font-size:0.7rem;color:var(--text-muted)">day streak</span>`;
+  const el = document.getElementById('streak-widget'); if (!el) return;
+  const st = getStreak(), lit = st.days.includes(new Date().toDateString());
+  el.innerHTML = `<span class="flame ${lit?'lit':''}">🔥</span><span class="streak-n">${st.current}</span><span>streak</span>`;
 }
 
-/* ── Timer ────────────────────────────────────────────────────────────────── */
-let timerInterval = null, timerTotal = 15*60, timerRemaining = 15*60, timerRunning = false;
-const CIRC = 2 * Math.PI * 52;
+/* ── Timer ─────────────────────────────────────────────── */
+let tInterval=null, tTotal=15*60, tLeft=15*60, tRunning=false;
+const CIRC = 2*Math.PI*52;
 
-function fmtTime(s) { return `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`; }
+function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 
-function updateRing() {
-  const prog = document.getElementById('timer-ring-prog');
-  if (!prog) return;
-  prog.style.strokeDashoffset = CIRC * (1 - timerRemaining / timerTotal);
-  prog.classList.toggle('done', timerRemaining === 0);
+function ringUpdate() {
+  const p = document.getElementById('ring-prog'); if(!p) return;
+  p.style.strokeDashoffset = CIRC*(1-tLeft/tTotal);
+  p.classList.toggle('done', tLeft===0);
 }
 
-function setTimer(mins, label) {
-  clearInterval(timerInterval);
-  timerRunning = false;
-  timerTotal = timerRemaining = mins * 60;
-  document.getElementById('timer-display').textContent = fmtTime(timerRemaining);
+function setTimer(m, lbl) {
+  clearInterval(tInterval); tRunning = false;
+  tTotal = tLeft = m*60;
+  document.getElementById('ring-time').textContent = fmt(tLeft);
   document.getElementById('timer-start').textContent = 'start';
-  updateRing();
-  document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.mins) === mins));
-  const ci = document.getElementById('custom-mins');
-  if (![15,25,30,60].includes(mins)) {
-    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('[data-mins="0"]').classList.add('active');
-    ci.style.display = 'block'; ci.value = mins;
-  } else { ci.style.display = 'none'; }
-  if (label) document.getElementById('timer-subject').value = label;
-  const card = document.querySelector('.timer-card');
-  if (card) { card.style.boxShadow = `0 0 0 2px var(--accent)`; setTimeout(() => { card.style.boxShadow = ''; }, 500); }
+  ringUpdate();
+  document.querySelectorAll('.preset').forEach(b => b.classList.toggle('active', parseInt(b.dataset.m)===m));
+  const ci = document.getElementById('custom-min');
+  if (![15,25,30,60].includes(m)) {
+    document.querySelectorAll('.preset').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-m="0"]').classList.add('active');
+    ci.style.display='block'; ci.value=m;
+  } else ci.style.display='none';
+  if (lbl) document.getElementById('timer-label').value = lbl;
+  const p = document.querySelector('.timer-panel');
+  if(p){p.style.boxShadow=`0 0 0 2px var(--a)`;setTimeout(()=>p.style.boxShadow='',500);}
 }
 
-function playAlarm() {
+function alarm() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [0, 0.3, 0.6].forEach((t, i) => {
-      const osc = ctx.createOscillator(), gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = 'sine'; osc.frequency.value = [660,880,1100][i];
-      gain.gain.setValueAtTime(0.35, ctx.currentTime + t);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.28);
-      osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + 0.3);
+    const ctx = new(window.AudioContext||window.webkitAudioContext)();
+    [0,0.3,0.6].forEach((t,i) => {
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.type='sine';o.frequency.value=[660,880,1100][i];
+      g.gain.setValueAtTime(0.35,ctx.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.28);
+      o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+0.3);
     });
-  } catch(e) {}
+  } catch(e){}
 }
 
 function initTimer() {
+  document.getElementById('ring-prog').style.strokeDasharray = CIRC;
+  ringUpdate();
   const startBtn = document.getElementById('timer-start');
   const resetBtn = document.getElementById('timer-reset');
-  const display  = document.getElementById('timer-display');
-  const ci       = document.getElementById('custom-mins');
+  const ci = document.getElementById('custom-min');
 
-  document.getElementById('timer-ring-prog').style.strokeDasharray = CIRC;
-  updateRing();
+  document.querySelectorAll('.preset').forEach(b => b.addEventListener('click', () => {
+    const m = parseInt(b.dataset.m);
+    document.querySelectorAll('.preset').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    if(m===0){ci.style.display='block';ci.focus();}
+    else{ci.style.display='none';setTimer(m);}
+  }));
+  ci.addEventListener('change',()=>{const v=parseInt(ci.value);if(v>0)setTimer(v);});
 
-  document.querySelectorAll('.preset-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const mins = parseInt(btn.dataset.mins);
-      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      if (mins === 0) { ci.style.display = 'block'; ci.focus(); }
-      else { ci.style.display = 'none'; setTimer(mins); }
-    });
-  });
-  ci.addEventListener('change', () => { const v = parseInt(ci.value); if (v > 0) setTimer(v); });
-
-  startBtn.addEventListener('click', () => {
-    if (timerRemaining === 0) return;
-    if (timerRunning) {
-      clearInterval(timerInterval); timerRunning = false; startBtn.textContent = 'resume';
-    } else {
-      timerRunning = true; startBtn.textContent = 'pause';
-      timerInterval = setInterval(() => {
-        timerRemaining--;
-        display.textContent = fmtTime(timerRemaining);
-        updateRing();
-        if (timerRemaining === 0) {
-          clearInterval(timerInterval); timerRunning = false;
-          startBtn.textContent = 'start';
-          logSession(); playAlarm();
-        }
-      }, 1000);
+  startBtn.addEventListener('click',()=>{
+    if(tLeft===0)return;
+    if(tRunning){clearInterval(tInterval);tRunning=false;startBtn.textContent='resume';}
+    else{
+      tRunning=true;startBtn.textContent='pause';
+      tInterval=setInterval(()=>{
+        tLeft--;
+        document.getElementById('ring-time').textContent=fmt(tLeft);
+        ringUpdate();
+        if(tLeft===0){clearInterval(tInterval);tRunning=false;startBtn.textContent='start';logSession();alarm();}
+      },1000);
     }
   });
-
-  resetBtn.addEventListener('click', () => {
-    clearInterval(timerInterval); timerRunning = false;
-    timerRemaining = timerTotal;
-    display.textContent = fmtTime(timerRemaining);
-    startBtn.textContent = 'start';
-    updateRing();
+  resetBtn.addEventListener('click',()=>{
+    clearInterval(tInterval);tRunning=false;tLeft=tTotal;
+    document.getElementById('ring-time').textContent=fmt(tLeft);
+    document.getElementById('timer-start').textContent='start';
+    ringUpdate();
   });
 }
 
 function logSession() {
-  const subject = document.getElementById('timer-subject').value.trim() || 'study session';
-  const mins = Math.round(timerTotal / 60);
-  const time = new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
-  const el = document.getElementById('session-log-entries');
-  el.querySelector('.log-empty')?.remove();
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-check">✓</span><span>${subject} <em style="color:var(--text-muted);font-size:0.7rem">(${mins}m)</em></span><span class="log-time">${time}</span>`;
-  el.prepend(entry);
+  const lbl=document.getElementById('timer-label').value.trim()||'study session';
+  const mins=Math.round(tTotal/60);
+  const time=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  const el=document.getElementById('session-log');
+  el.querySelector('.empty-state')?.remove();
+  const e=document.createElement('div');e.className='log-entry';
+  e.innerHTML=`<span class="log-check">✓</span><span>${lbl} <em style="color:var(--tx-3);font-size:0.65rem">(${mins}m)</em></span><span class="log-time">${time}</span>`;
+  el.prepend(e);
 }
 
-/* ── Checklist ────────────────────────────────────────────────────────────── */
+/* ── Checklist ─────────────────────────────────────────── */
 function initChecklist(dow, day) {
-  const el = document.getElementById('task-checklist');
+  const el = document.getElementById('task-list');
   const key = `mz-tasks-${new Date().toDateString()}`;
   const saved = S.get(key) || {};
-  const allTasks = day.subjects.flatMap(s => s.tasks.map(t => ({ ...t, subject: s.name, color: s.color })));
+  const tasks = day.subjects.flatMap(s => s.tasks.map(t => ({...t,_subj:s.name,_color:s.color})));
 
-  el.innerHTML = '';
-  allTasks.forEach((task, i) => {
-    task._idx = i;
-    const checked = !!saved[i];
-    const item = document.createElement('div');
-    item.className = 'checklist-item' + (checked ? ' checked' : '');
-    item.dataset.idx = i;
+  el.innerHTML='';
+  tasks.forEach((t,i)=>{
+    t._i=i;
+    const done=!!saved[i];
+    const item=document.createElement('div');
+    item.className='task-item'+(done?' done':'');
+    item.dataset.i=i;
+    const pill=t.mins?`<span class="task-pill">${t.mins}m</span>`:'';
+    const ai=t.generateContent?`<span class="task-ai">✦</span>`:'';
+    item.innerHTML=`<input type="checkbox"${done?' checked':''}/>
+      <span class="task-text">${t.text}${pill}${ai}</span>
+      <button class="task-arrow">›</button>`;
 
-    const timePill = task.mins ? `<span class="task-time-pill">${task.mins}m</span>` : '';
-    const aiDot    = task.generateContent ? `<span class="task-ai-dot">✦</span>` : '';
-
-    item.innerHTML = `
-      <input type="checkbox" ${checked ? 'checked' : ''} />
-      <span class="checklist-text">${task.text}${timePill}${aiDot}</span>
-      <button class="task-arrow">›</button>
-    `;
-
-    item.querySelector('input').addEventListener('change', e => {
-      saved[i] = e.target.checked;
-      S.set(key, saved);
-      item.classList.toggle('checked', e.target.checked);
-      updateProgress(allTasks.length, saved);
-      if (Object.values(saved).filter(Boolean).length === allTasks.length) {
-        const shownKey = `mz-reward-${new Date().toDateString()}`;
-        if (!S.get(shownKey)) { S.set(shownKey, true); markDayComplete(); showReward(day); }
-      }
+    item.querySelector('input').addEventListener('change',e=>{
+      saved[i]=e.target.checked;
+      S.set(key,saved);
+      item.classList.toggle('done',e.target.checked);
+      updateTaskBar(tasks.length,saved);
+      const allDone=Object.values(saved).filter(Boolean).length===tasks.length;
+      const shownKey=`mz-reward-${new Date().toDateString()}`;
+      if(allDone&&!S.get(shownKey)){S.set(shownKey,true);markDay();showReward(day);}
     });
 
-    item.querySelector('.checklist-text').addEventListener('click', () => openDetail(task));
-    item.querySelector('.task-arrow').addEventListener('click', () => openDetail(task));
+    item.querySelector('.task-text').addEventListener('click',()=>openDetail(t));
+    item.querySelector('.task-arrow').addEventListener('click',()=>openDetail(t));
     el.appendChild(item);
   });
 
-  updateProgress(allTasks.length, saved);
+  updateTaskBar(tasks.length,saved);
 
-  document.getElementById('reset-tasks-btn').addEventListener('click', () => {
+  document.getElementById('reset-tasks').addEventListener('click',()=>{
     S.del(`mz-tasks-${new Date().toDateString()}`);
-    initChecklist(dow, day);
-    document.getElementById('detail-content').style.display = 'none';
-    document.getElementById('detail-empty').style.display = 'flex';
+    initChecklist(dow,day);
+    document.getElementById('detail-empty').style.display='flex';
+    document.getElementById('detail-body-wrap').style.display='none';
   });
 }
 
-function updateProgress(total, saved) {
-  const done = Object.values(saved).filter(Boolean).length;
-  document.getElementById('progress-bar-fill').style.width = `${total ? (done/total)*100 : 0}%`;
-  document.getElementById('progress-summary').textContent = `${done} / ${total}`;
+function updateTaskBar(total,saved){
+  const done=Object.values(saved).filter(Boolean).length;
+  document.getElementById('task-bar').style.width=`${total?(done/total)*100:0}%`;
+  document.getElementById('task-count').textContent=`${done} / ${total}`;
 }
 
-/* ── Detail card ──────────────────────────────────────────────────────────── */
-function initDetailCard() {
-  document.getElementById('detail-timer-btn').addEventListener('click', () => {
-    if (currentDetailTask?.mins) setTimer(currentDetailTask.mins, currentDetailTask.text);
+/* ── Detail panel ──────────────────────────────────────── */
+function initDetail() {
+  document.getElementById('detail-set-timer').addEventListener('click',()=>{
+    if(currentTask?.mins)setTimer(currentTask.mins,currentTask.text);
   });
-  document.getElementById('detail-tip-refresh').addEventListener('click', () => {
-    if (currentDetailTask) fetchTip(currentDetailTask);
-  });
-  document.getElementById('detail-gen-refresh').addEventListener('click', () => {
-    if (currentDetailTask) fetchGeneratedContent(currentDetailTask);
-  });
-  document.getElementById('detail-chat-send').addEventListener('click', sendChat);
-  document.getElementById('detail-chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
-  document.getElementById('detail-goto-settings').addEventListener('click', () => openSettings());
+  document.getElementById('detail-tip-refresh').addEventListener('click',()=>{if(currentTask)fetchTip(currentTask);});
+  document.getElementById('detail-gen-refresh').addEventListener('click',()=>{if(currentTask)fetchGen(currentTask);});
+  document.getElementById('detail-chat-send').addEventListener('click',sendChat);
+  document.getElementById('detail-chat-in').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+  document.getElementById('detail-open-settings')?.addEventListener('click',openSettings);
 }
 
 function openDetail(task) {
-  currentDetailTask = task;
-  detailChatHistory = [];
+  currentTask=task; chatHistory=[];
+  document.querySelectorAll('.task-item').forEach(el=>el.classList.toggle('selected',parseInt(el.dataset.i)===task._i));
+  document.getElementById('detail-empty').style.display='none';
+  document.getElementById('detail-body-wrap').style.display='flex';
 
-  // Highlight selected
-  document.querySelectorAll('.checklist-item').forEach(el => {
-    el.classList.toggle('selected', parseInt(el.dataset.idx) === task._idx);
-  });
+  const chip=document.getElementById('detail-chip');
+  chip.textContent=task._subj||'';
+  chip.style.background=task._color||'#E0E0E0';chip.style.color='#333';
 
-  document.getElementById('detail-empty').style.display = 'none';
-  document.getElementById('detail-content').style.display = 'flex';
+  document.getElementById('detail-mins').textContent=task.mins?`⏱ ${task.mins} min`:'';
+  document.getElementById('detail-title').textContent=task.text;
 
-  // Subject tag
-  const tagEl = document.getElementById('detail-subject-tag');
-  tagEl.textContent = task.subject || '';
-  tagEl.style.background = task.color || '#E0E0E0';
-  tagEl.style.color = '#333';
+  const dd=document.getElementById('detail-desc');
+  if(task.detail){dd.textContent=task.detail;dd.style.display='block';}else dd.style.display='none';
 
-  document.getElementById('detail-time').textContent = task.mins ? `⏱ ${task.mins} min` : '';
-  document.getElementById('detail-title').textContent = task.text;
+  const stBtn=document.getElementById('detail-set-timer');
+  stBtn.style.display=task.mins?'block':'none';
+  if(task.mins)stBtn.textContent=`▶ set ${task.mins} min timer & start`;
 
-  const bodyEl = document.getElementById('detail-body');
-  if (task.detail) { bodyEl.textContent = task.detail; bodyEl.style.display = 'block'; }
-  else { bodyEl.style.display = 'none'; }
+  const genWrap=document.getElementById('detail-gen-wrap');
+  if(task.generateContent){
+    genWrap.style.display='flex';
+    document.getElementById('detail-gen').innerHTML='<span style="font-size:0.72rem;color:var(--tx-3);font-style:italic">tap ↻ to generate…</span>';
+    if(USER.apiKey)fetchGen(task);
+  } else genWrap.style.display='none';
 
-  // Timer button
-  const timerBtn = document.getElementById('detail-timer-btn');
-  timerBtn.style.display = task.mins ? 'block' : 'none';
-  if (task.mins) timerBtn.textContent = `▶ set ${task.mins} min timer & start`;
+  document.getElementById('detail-chat-log').innerHTML='';
+  document.getElementById('detail-chat-in').value='';
 
-  // Generated content
-  const genSection = document.getElementById('detail-gen-section');
-  const genContent = document.getElementById('detail-gen-content');
-  if (task.generateContent) {
-    genSection.style.display = 'flex';
-    genContent.innerHTML = '<span class="ai-loading">tap ↻ to generate content…</span>';
-    if (USER.apiKey) fetchGeneratedContent(task);
-  } else {
-    genSection.style.display = 'none';
-  }
+  const aiWrap=document.getElementById('detail-ai-wrap');
+  const noKey=document.getElementById('detail-no-key');
+  if(USER.apiKey){aiWrap.style.display='flex';noKey.style.display='none';fetchTip(task);}
+  else{aiWrap.style.display='none';noKey.style.display='flex';}
 
-  // AI tip
-  const aiSection = document.getElementById('detail-ai-section');
-  const keySection = document.getElementById('detail-key-section');
-  const chatHistory = document.getElementById('detail-chat-history');
-  const chatInput = document.getElementById('detail-chat-input');
-  chatHistory.innerHTML = '';
-  chatInput.value = '';
-
-  if (USER.apiKey) {
-    aiSection.style.display = 'flex';
-    keySection.style.display = 'none';
-    fetchTip(task);
-  } else {
-    aiSection.style.display = 'none';
-    keySection.style.display = 'flex';
-  }
-
-  if (window.innerWidth < 768) {
-    document.getElementById('detail-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
+  if(window.innerWidth<720)document.getElementById('detail-panel').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 async function fetchTip(task) {
-  const tipEl = document.getElementById('detail-ai-tip');
-  tipEl.innerHTML = '<span class="ai-loading">generating tip…</span>';
-  detailChatHistory = [];
-
-  const sys = `You are a concise, direct study coach for ${USER.name}, a Cambridge middle school student. Current task: "${task.text}" (${task.subject}, ${task.mins ? task.mins + ' min' : 'flexible'}). Give 2-3 sentence max, specific, actionable advice. No fluff.`;
-  const msg = `One specific tip for doing this well right now: "${task.text}"`;
-
-  const reply = await groq([{ role: 'system', content: sys }, { role: 'user', content: msg }], 200);
-  if (reply) {
-    tipEl.textContent = reply;
-    detailChatHistory = [{ role: 'system', content: sys }, { role: 'user', content: msg }, { role: 'assistant', content: reply }];
-  } else {
-    tipEl.innerHTML = '<span class="ai-loading">couldn\'t load tip — check api key in settings</span>';
-  }
+  const el=document.getElementById('detail-tip');
+  el.innerHTML='<span style="font-size:0.72rem;color:var(--tx-3);font-style:italic">generating…</span>';
+  chatHistory=[];
+  const sys=`You are a concise study coach for ${USER.name}, a Cambridge ${USER.grade||'Grade 8'} student. Current task: "${task.text}" (${task._subj}, ${task.mins?task.mins+' min':'flexible'}). 2-3 sentences max. Specific. Actionable. No fluff.`;
+  const msg=`One specific tip for: "${task.text}"`;
+  const r=await groq([{role:'system',content:sys},{role:'user',content:msg}],180);
+  if(r){el.textContent=r;chatHistory=[{role:'system',content:sys},{role:'user',content:msg},{role:'assistant',content:r}];}
+  else el.innerHTML='<span style="font-size:0.72rem;color:var(--tx-3)">couldn\'t load — check api key in settings</span>';
 }
 
-async function fetchGeneratedContent(task) {
-  const el = document.getElementById('detail-gen-content');
-  el.innerHTML = '<span class="ai-loading">generating…</span>';
-
-  const prompt = `Generate educational content for: "${task.text}" (Subject: ${task.subject}).
-Student: ${USER.name}, Cambridge middle school.
-Context from their plan: ${task.detail || 'no additional context'}
-
-Format EXACTLY with --- headings ---:
-Pick 3-5 relevant sections from: CONCEPT, EXTRACT/TEXT, QUESTIONS, PROBLEMS, CHALLENGE, TRACE EXERCISE, TOPIC, THE WHY, DRAW IT, EXAM QUESTION, MARK SCHEME, WATCH/LISTEN, WORKED EXAMPLE, EXTENSION
-
-Use ---SECTION NAME--- format. Put answers/mark schemes under spoiler sections.
-Keep content specific, actionable, Cambridge-standard. 200-300 words total.`;
-
-  const reply = await groq([
-    { role: 'system', content: 'Generate structured educational content. Follow format exactly. No preamble.' },
-    { role: 'user', content: prompt }
-  ], 600);
-
-  if (reply) el.innerHTML = parseGenContent(reply);
-  else el.innerHTML = '<span class="ai-loading">couldn\'t generate — check api key</span>';
+async function fetchGen(task) {
+  const el=document.getElementById('detail-gen');
+  el.innerHTML='<span style="font-size:0.72rem;color:var(--tx-3);font-style:italic">generating…</span>';
+  const prompt=`Generate educational content for: "${task.text}" (${task._subj}, Cambridge ${USER.grade||'Grade 8'}).
+Student: ${USER.name}. Context: ${task.detail||''}
+Format with ---HEADING--- sections. 3-4 sections. Relevant to task.
+Use spoiler format for answers: ---ANSWERS--- or ---MARK SCHEME---
+150-250 words total. Specific and actionable.`;
+  const r=await groq([{role:'system',content:'Generate structured educational content. Format exactly with ---HEADING--- sections. No preamble.'},{role:'user',content:prompt}],500);
+  if(r) el.innerHTML=parseGen(r);
+  else el.innerHTML='<span style="font-size:0.72rem;color:var(--tx-3)">couldn\'t generate — check api key</span>';
 }
 
-function parseGenContent(raw) {
-  const parts = raw.split(/---([^-\n]+)---/).filter(s => s.trim());
-  if (parts.length < 2) return `<div class="gen-block"><div class="gen-body">${raw}</div></div>`;
-  let html = '';
-  for (let i = 0; i < parts.length - 1; i += 2) {
-    const heading = parts[i].trim();
-    const body = parts[i+1].trim().replace(/\n/g, '<br>');
-    const isSpoiler = /MARK SCHEME|ANSWERS|ANSWER/.test(heading.toUpperCase());
-    if (isSpoiler) {
-      html += `<details class="gen-block gen-spoiler"><summary><span class="gen-heading">${heading}</span> <span style="font-size:0.7rem;color:var(--text-muted)">(tap to reveal)</span></summary><div class="gen-body">${body}</div></details>`;
-    } else {
-      html += `<div class="gen-block"><div class="gen-heading">${heading}</div><div class="gen-body">${body}</div></div>`;
-    }
+function parseGen(raw) {
+  const parts=raw.split(/---([^-\n]+)---/).filter(s=>s.trim());
+  if(parts.length<2)return`<div class="gen-block"><div class="gen-body">${raw}</div></div>`;
+  let html='';
+  for(let i=0;i<parts.length-1;i+=2){
+    const h=parts[i].trim(),b=parts[i+1].trim().replace(/\n/g,'<br>');
+    const spoiler=/ANSWER|MARK SCHEME/i.test(h);
+    html+=spoiler
+      ?`<details class="gen-block"><summary>${h} <span style="font-size:0.6rem;color:var(--tx-3)">(reveal)</span></summary><div class="gen-body">${b}</div></details>`
+      :`<div class="gen-block"><div class="gen-heading">${h}</div><div class="gen-body">${b}</div></div>`;
   }
   return html;
 }
 
 async function sendChat() {
-  const input = document.getElementById('detail-chat-input');
-  const msg = input.value.trim();
-  if (!msg || !currentDetailTask || !USER.apiKey) return;
-  input.value = '';
-
-  const histEl = document.getElementById('detail-chat-history');
-
-  const userBubble = document.createElement('div');
-  userBubble.className = 'chat-bubble user';
-  userBubble.textContent = msg;
-  histEl.appendChild(userBubble);
-
-  const loadBubble = document.createElement('div');
-  loadBubble.className = 'chat-bubble ai';
-  loadBubble.innerHTML = '<span class="ai-loading">…</span>';
-  histEl.appendChild(loadBubble);
-  histEl.scrollTop = histEl.scrollHeight;
-
-  detailChatHistory.push({ role: 'user', content: msg });
-  const reply = await groq(detailChatHistory, 300);
-  if (reply) { detailChatHistory.push({ role: 'assistant', content: reply }); loadBubble.textContent = reply; }
-  else loadBubble.innerHTML = '<span class="ai-loading">error — check api key</span>';
-  histEl.scrollTop = histEl.scrollHeight;
+  const input=document.getElementById('detail-chat-in');
+  const msg=input.value.trim();
+  if(!msg||!currentTask||!USER.apiKey)return;
+  input.value='';
+  const log=document.getElementById('detail-chat-log');
+  const ub=document.createElement('div');ub.className='chat-bubble user';ub.textContent=msg;log.appendChild(ub);
+  const lb=document.createElement('div');lb.className='chat-bubble ai';lb.innerHTML='<span style="color:var(--tx-3)">…</span>';log.appendChild(lb);
+  log.scrollTop=log.scrollHeight;
+  chatHistory.push({role:'user',content:msg});
+  const r=await groq(chatHistory,280);
+  if(r){chatHistory.push({role:'assistant',content:r});lb.textContent=r;}
+  else lb.innerHTML='<span style="color:var(--tx-3)">error — check api key</span>';
+  log.scrollTop=log.scrollHeight;
 }
 
-/* ── Music (Web Audio) ────────────────────────────────────────────────────── */
-let audioCtx = null, musicNodes = [], currentSound = 'none';
+/* ── Music ─────────────────────────────────────────────── */
+let audioCtx=null, audioNodes=[], currentSnd='none';
 
-function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+function getCtx(){
+  if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();
   return audioCtx;
 }
+function stopAudio(){audioNodes.forEach(n=>{try{n.stop?.();n.disconnect?.();}catch(e){}});audioNodes=[];}
 
-function stopMusic() {
-  musicNodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch(e) {} });
-  musicNodes = [];
-}
-
-function startBrownNoise(vol) {
-  const ctx = getAudioCtx();
-  const bufSize = ctx.sampleRate * 2;
-  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < bufSize; i++) {
-    const white = Math.random() * 2 - 1;
-    data[i] = last = (last + 0.02 * white) / 1.02;
+function brownNoise(vol){
+  const ctx=getCtx(), size=ctx.sampleRate*4;
+  const buf=ctx.createBuffer(2,size,ctx.sampleRate);
+  for(let c=0;c<2;c++){
+    const d=buf.getChannelData(c);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<size;i++){
+      const w=Math.random()*2-1;
+      b0=0.99886*b0+w*0.0555179;b1=0.99332*b1+w*0.0750759;
+      b2=0.9690*b2+w*0.153852;b3=0.8665*b3+w*0.3104856;
+      b4=0.55*b4+w*0.5329522;b5=-0.7616*b5-w*0.016898;
+      d[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)/8;b6=w*0.115926;
+    }
   }
-  data.forEach((_, i, arr) => arr[i] *= 3.5);
-
-  const src = ctx.createBufferSource();
-  src.buffer = buf; src.loop = true;
-  const gain = ctx.createGain(); gain.gain.value = vol;
-  src.connect(gain); gain.connect(ctx.destination);
-  src.start();
-  musicNodes = [src, gain];
+  const src=ctx.createBufferSource();src.buffer=buf;src.loop=true;
+  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=700;lp.Q.value=0.4;
+  const g=ctx.createGain();g.gain.value=vol*0.88;
+  src.connect(lp);lp.connect(g);g.connect(ctx.destination);src.start();
+  audioNodes=[src,lp,g];
 }
 
-function startRain(vol) {
-  const ctx = getAudioCtx();
-  // White noise base
-  const bufSize = ctx.sampleRate * 2;
-  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-
-  const src = ctx.createBufferSource();
-  src.buffer = buf; src.loop = true;
-  const filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 400; filter.Q.value = 0.5;
-  const gain = ctx.createGain(); gain.gain.value = vol * 0.6;
-  src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-  src.start();
-  musicNodes = [src, filter, gain];
-}
-
-function startFocus(vol) {
-  const ctx = getAudioCtx();
-  const nodes = [];
-  [40, 80].forEach(freq => {
-    const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq;
-    const gain = ctx.createGain(); gain.gain.value = vol * 0.15;
-    osc.connect(gain); gain.connect(ctx.destination); osc.start();
-    nodes.push(osc, gain);
+function rainNoise(vol){
+  const ctx=getCtx(),nodes=[],size=ctx.sampleRate*3;
+  [[3200,0.7,1200,'highpass',vol*0.42],[700,0.3,0,'bandpass',vol*0.28],[150,0.2,0,'lowpass',vol*0.14]].forEach(([freq,_,hpFreq,type,gain])=>{
+    const b=ctx.createBuffer(2,size,ctx.sampleRate);
+    for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<size;i++)d[i]=Math.random()*2-1;}
+    const src=ctx.createBufferSource();src.buffer=b;src.loop=true;
+    const f=ctx.createBiquadFilter();f.type=type;f.frequency.value=type==='highpass'?hpFreq:freq;
+    if(type==='highpass'){const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=freq;bp.Q.value=0.7;const g=ctx.createGain();g.gain.value=gain;src.connect(f);f.connect(bp);bp.connect(g);g.connect(ctx.destination);src.start();nodes.push(src,f,bp,g);}
+    else{const g=ctx.createGain();g.gain.value=gain;src.connect(f);f.connect(g);g.connect(ctx.destination);src.start();nodes.push(src,f,g);}
   });
-  musicNodes = nodes;
+  audioNodes=nodes;
 }
 
-function setMusic(sound, vol) {
-  stopMusic();
-  currentSound = sound;
-  if (sound === 'none') return;
-  if (sound === 'brown') startBrownNoise(vol);
-  if (sound === 'rain')  startRain(vol);
-  if (sound === 'focus') startFocus(vol);
+function focusTones(vol){
+  const ctx=getCtx(),nodes=[];
+  [[200,240,vol*0.12],[100,110,vol*0.07]].forEach(([lf,rf,v])=>{
+    const m=ctx.createChannelMerger(2),g=ctx.createGain();g.gain.value=v;
+    const lo=ctx.createOscillator(),ro=ctx.createOscillator();
+    lo.type=ro.type='sine';lo.frequency.value=lf;ro.frequency.value=rf;
+    const lg=ctx.createGain(),rg=ctx.createGain();lg.gain.value=rg.gain.value=1;
+    lo.connect(lg);lg.connect(m,0,0);ro.connect(rg);rg.connect(m,0,1);
+    m.connect(g);g.connect(ctx.destination);lo.start();ro.start();
+    nodes.push(lo,ro,lg,rg,m,g);
+  });
+  // soft noise bed
+  const size=ctx.sampleRate*2,b=ctx.createBuffer(1,size,ctx.sampleRate),d=b.getChannelData(0);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+  for(let i=0;i<size;i++){const w=Math.random()*2-1;b0=0.99886*b0+w*0.0555179;b1=0.99332*b1+w*0.0750759;b2=0.969*b2+w*0.153852;b3=0.8665*b3+w*0.3104856;b4=0.55*b4+w*0.5329522;b5=-0.7616*b5-w*0.016898;d[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)/8;b6=w*0.115926;}
+  const ns=ctx.createBufferSource();ns.buffer=b;ns.loop=true;
+  const ng=ctx.createGain();ng.gain.value=vol*0.03;
+  ns.connect(ng);ng.connect(ctx.destination);ns.start();nodes.push(ns,ng);
+  audioNodes=nodes;
 }
 
-function initMusic() {
-  const volSlider = document.getElementById('music-vol');
-  document.querySelectorAll('.music-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.music-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      setMusic(btn.dataset.sound, parseFloat(volSlider.value));
+function setMusic(snd,vol){
+  stopAudio();currentSnd=snd;
+  if(snd==='brown')brownNoise(vol);
+  else if(snd==='rain')rainNoise(vol);
+  else if(snd==='focus')focusTones(vol);
+}
+
+function initMusic(){
+  const vol=()=>parseFloat(document.getElementById('vol-slider').value);
+  document.querySelectorAll('.music-chip').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('.music-chip').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      setMusic(b.dataset.snd,vol());
     });
   });
-  volSlider.addEventListener('input', () => {
-    if (currentSound !== 'none') setMusic(currentSound, parseFloat(volSlider.value));
+  document.getElementById('vol-slider').addEventListener('input',()=>{
+    if(currentSnd!=='none')setMusic(currentSnd,vol());
   });
 }
 
-/* ── Plan tab ─────────────────────────────────────────────────────────────── */
-function initPlan() {
-  const plan = USER.plan;
-  const subEl = document.getElementById('plan-sub');
-  if (plan.summary) subEl.textContent = plan.summary;
-  else subEl.textContent = `${USER.name}'s personalised weekly study plan`;
+/* ── Plan tab ──────────────────────────────────────────── */
+function initPlan(){
+  const plan=USER.plan;
+  document.getElementById('plan-title').textContent=`${USER.name.toLowerCase()}'s plan`;
+  document.getElementById('plan-sub').textContent=plan.summary||'';
 
-  let activeDow = new Date().getDay();
-  if (activeDow === 0) activeDow = 1;
+  let activeDow=new Date().getDay();if(activeDow===0)activeDow=1;
+  const dayKeys=Object.keys(plan.days);
 
-  document.querySelectorAll('.day-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.day-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderPlanDay(parseInt(btn.dataset.day));
+  const tabsEl=document.getElementById('day-tabs');
+  tabsEl.innerHTML=dayKeys.map(k=>`<button class="day-tab${k==activeDow?' active':''}" data-day="${k}">${plan.days[k].name.slice(0,3).toLowerCase()}</button>`).join('');
+
+  function renderDay(k){
+    const day=plan.days[k];
+    document.getElementById('plan-day-view').innerHTML=day.subjects.map(s=>`
+      <div class="plan-card">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem">
+          <span class="subj-chip" style="background:${s.color};color:#333">${s.name}</span>
+        </div>
+        <div class="plan-card-dur">${s.duration}</div>
+        <ul class="plan-task-list">${s.tasks.map(t=>`<li>${t.text}${t.mins?`<span class="task-pill" style="margin-left:0.4rem">${t.mins}m</span>`:''}</li>`).join('')}</ul>
+      </div>`).join('');
+  }
+
+  tabsEl.querySelectorAll('.day-tab').forEach(b=>{
+    b.addEventListener('click',()=>{
+      tabsEl.querySelectorAll('.day-tab').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      renderDay(b.dataset.day);
     });
   });
 
-  const activeTab = document.querySelector(`.day-tab[data-day="${activeDow}"]`);
-  if (activeTab) { activeTab.classList.add('active'); renderPlanDay(activeDow); }
-  else { document.querySelector('.day-tab').classList.add('active'); renderPlanDay(1); }
+  renderDay(dayKeys.includes(String(activeDow))?String(activeDow):dayKeys[0]);
 
-  document.getElementById('regenerate-plan-btn').addEventListener('click', async () => {
-    if (!USER.apiKey) { alert('Add a Groq API key in settings first.'); return; }
-    if (!confirm('This will regenerate your entire study plan. Continue?')) return;
-    document.getElementById('regenerate-plan-btn').textContent = 'generating…';
-    const plan = await generatePlan(USER.name, USER.reportCardText || '', USER.syllabusText || '');
-    if (plan) { USER.plan = plan; S.set('mz-user', USER); initPlan(); initCSRoadmap(); initProjects(); }
-    document.getElementById('regenerate-plan-btn').textContent = '↻ regenerate plan';
+  document.getElementById('regen-plan-btn').addEventListener('click',async()=>{
+    if(!USER.apiKey){alert('Add a Groq API key in settings first.');return;}
+    if(!confirm('Regenerate your study plan?'))return;
+    document.getElementById('regen-plan-btn').textContent='generating…';
+    try{
+      const plan=await generatePlan({name:USER.name,grade:USER.grade,hours:USER.hours,days:USER.days,focus:USER.focus,style:USER.style,coaching:USER.coaching},USER.reportText||'',USER.syllabusText||'','');
+      if(plan){USER.plan=plan;S.set('mz',USER);initPlan();initCS();initProjects();alert('Plan regenerated!');}
+    }catch(e){console.error(e);}
+    document.getElementById('regen-plan-btn').textContent='↻ regenerate';
   });
 }
 
-function renderPlanDay(dow) {
-  const day = USER.plan.days[dow];
-  const el = document.getElementById('plan-day-content');
-  if (!day) { el.innerHTML = '<p style="color:var(--text-muted)">no plan for this day</p>'; return; }
-  el.innerHTML = day.subjects.map(s => `
-    <div class="plan-subject-card">
-      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem">
-        <span class="subject-chip" style="background:${s.color};color:#333">${s.name}</span>
+/* ── CS tab ────────────────────────────────────────────── */
+function initCS(){
+  const el=document.getElementById('cs-content');
+  el.innerHTML=(USER.plan.csRoadmap||[]).map(m=>`
+    <div class="cs-card">
+      <div class="cs-card-head"><span class="cs-month">${m.month}</span><span class="cs-theme">${m.theme}</span></div>
+      <div class="cs-weeks">${(m.weeks||[]).map(w=>`
+        <div class="cs-week">
+          <div class="cs-wk-num">${w.range}</div>
+          <div><h4>${w.title}</h4><p>${w.description}</p></div>
+        </div>`).join('')}
       </div>
-      <div class="duration">${s.duration}</div>
-      <ul class="plan-task-list">
-        ${s.tasks.map(t => `<li>${t.text}${t.mins ? `<span class="task-time-pill" style="margin-left:0.4rem">${t.mins}m</span>` : ''}</li>`).join('')}
-      </ul>
-    </div>
-  `).join('');
+      ${m.resources?.length?`<div class="cs-resources">${m.resources.map(r=>`<div class="cs-res">${r}</div>`).join('')}</div>`:''}
+    </div>`).join('');
 }
 
-/* ── CS Roadmap ───────────────────────────────────────────────────────────── */
-function initCSRoadmap() {
-  const el = document.getElementById('cs-roadmap-content');
-  const roadmap = USER.plan.csRoadmap || [];
-  el.innerHTML = roadmap.map(m => `
-    <div class="cs-month-card">
-      <div class="cs-month-header">
-        <span class="cs-month-name">${m.month}</span>
-        <span class="cs-month-theme">${m.theme}</span>
-      </div>
-      <div class="cs-weeks">
-        ${(m.weeks || []).map(w => `
-          <div class="cs-week">
-            <div class="cs-week-num">${w.range}</div>
-            <div>
-              <h4>${w.title}</h4>
-              <p>${w.description}</p>
-            </div>
-          </div>
-        `).join('')}
-        ${m.resources?.length ? `
-          <div style="border-top:1px solid var(--border);padding-top:0.75rem;display:flex;flex-direction:column;gap:0.3rem">
-            ${m.resources.map(r => `<span style="font-size:0.78rem;color:var(--text-muted);padding-left:1rem;position:relative">
-              <span style="position:absolute;left:0;color:var(--accent)">·</span>${r}</span>`).join('')}
-          </div>
-        ` : ''}
-      </div>
-    </div>
-  `).join('');
-}
-
-/* ── Projects ─────────────────────────────────────────────────────────────── */
-function initProjects() {
-  const el = document.getElementById('projects-content');
-  const projects = USER.plan.projects || [];
-  el.innerHTML = projects.map(p => `
+/* ── Projects tab ──────────────────────────────────────── */
+function initProjects(){
+  const el=document.getElementById('projects-content');
+  el.innerHTML=(USER.plan.projects||[]).map(p=>`
     <div class="project-card">
-      <div class="project-month">${p.month} · 4 Saturdays · ${(p.subjects || []).join(' + ')}</div>
+      <div class="project-month">${p.month} · ${(p.subjects||[]).join(' + ')}</div>
       <h3 class="project-title">${p.title}</h3>
+      <div class="project-subj-tags">${(p.subjects||[]).map(s=>`<span class="subj-chip" style="background:var(--a-m);color:var(--a)">${s}</span>`).join('')}</div>
       <p class="project-desc">${p.description}</p>
-      <ol class="project-steps">${(p.steps || []).map(s => `<li>${s}</li>`).join('')}</ol>
+      <ol class="project-steps">${(p.steps||[]).map(s=>`<li>${s}</li>`).join('')}</ol>
       <div class="project-deliverable"><strong>deliverable:</strong> ${p.deliverable}</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-/* ── Settings ─────────────────────────────────────────────────────────────── */
-function openSettings() {
-  document.getElementById('settings-overlay').style.display = 'block';
-  document.getElementById('settings-panel').style.display = 'flex';
-  document.getElementById('settings-name').value = USER.name;
-  document.getElementById('settings-apikey').value = USER.apiKey || '';
-  const hoursEl = document.getElementById('settings-hours');
-  if (hoursEl) hoursEl.value = USER.hoursPerDay || '1 hour';
-  const focusEl = document.getElementById('settings-focus');
-  if (focusEl) focusEl.value = (USER.focusAreas || []).join(', ');
-  const coachEl = document.getElementById('settings-coaching');
-  if (coachEl) coachEl.value = USER.coaching || '';
-  document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.dataset.theme === (USER.theme || 'light')));
+/* ── Settings ──────────────────────────────────────────── */
+function openSettings(){
+  document.getElementById('settings-scrim').style.display='block';
+  document.getElementById('settings-drawer').style.display='flex';
+  document.getElementById('s-name').value=USER.name||'';
+  document.getElementById('s-key').value=USER.apiKey||'';
+  const h=document.getElementById('s-hours');if(h)h.value=USER.hours||'1 hour';
+  const f=document.getElementById('s-focus');if(f)f.value=(USER.focus||[]).join(', ');
+  const c=document.getElementById('s-coaching');if(c)c.value=USER.coaching||'';
+  document.querySelectorAll('.theme-btn').forEach(b=>b.classList.toggle('active',b.dataset.theme===(USER.theme||'light')));
 }
 
-function closeSettings() {
-  document.getElementById('settings-overlay').style.display = 'none';
-  document.getElementById('settings-panel').style.display = 'none';
+function closeSettings(){
+  document.getElementById('settings-scrim').style.display='none';
+  document.getElementById('settings-drawer').style.display='none';
 }
 
-function initSettings() {
-  document.getElementById('settings-btn').addEventListener('click', openSettings);
-  document.getElementById('settings-close').addEventListener('click', closeSettings);
-  document.getElementById('settings-overlay').addEventListener('click', closeSettings);
+function initSettings(){
+  document.getElementById('settings-open-btn').addEventListener('click',openSettings);
+  document.getElementById('mobile-settings-btn')?.addEventListener('click',openSettings);
+  document.getElementById('settings-close').addEventListener('click',closeSettings);
+  document.getElementById('settings-scrim').addEventListener('click',closeSettings);
 
-  document.getElementById('settings-save-name').addEventListener('click', () => {
-    const name = document.getElementById('settings-name').value.trim();
-    if (name) {
-      USER.name = name;
-      USER.hoursPerDay = document.getElementById('settings-hours')?.value || USER.hoursPerDay;
-      USER.focusAreas = (document.getElementById('settings-focus')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
-      USER.coaching = document.getElementById('settings-coaching')?.value.trim() || '';
-      S.set('mz-user', USER);
-      document.getElementById('header-greeting').textContent = `hey, ${name.toLowerCase()}`;
-    }
+  document.getElementById('s-save-name').addEventListener('click',()=>{
+    const n=document.getElementById('s-name').value.trim();
+    if(n){USER.name=n;S.set('mz',USER);document.getElementById('sidebar-greeting').textContent=`hey, ${n.toLowerCase()}`;}
+  });
+  document.getElementById('s-save-key').addEventListener('click',()=>{
+    USER.apiKey=document.getElementById('s-key').value.trim();S.set('mz',USER);
+    const ai=document.getElementById('detail-ai-wrap'),nk=document.getElementById('detail-no-key');
+    if(ai)ai.style.display=USER.apiKey?'flex':'none';
+    if(nk)nk.style.display=USER.apiKey?'none':'flex';
+  });
+  document.getElementById('s-save-prefs').addEventListener('click',()=>{
+    USER.hours=document.getElementById('s-hours')?.value||USER.hours;
+    USER.focus=(document.getElementById('s-focus')?.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+    USER.coaching=document.getElementById('s-coaching')?.value.trim()||'';
+    S.set('mz',USER);
   });
 
-  document.getElementById('settings-save-key').addEventListener('click', () => {
-    const key = document.getElementById('settings-apikey').value.trim();
-    USER.apiKey = key; S.set('mz-user', USER);
-    document.getElementById('detail-ai-section').style.display = key ? 'flex' : 'none';
-    document.getElementById('detail-key-section').style.display = key ? 'none' : 'flex';
-  });
+  document.querySelectorAll('.theme-btn').forEach(b=>b.addEventListener('click',()=>applyTheme(b.dataset.theme)));
 
-  document.querySelectorAll('.theme-swatch').forEach(btn => {
-    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
-  });
+  let sReport=null,sSyllabus=null;
+  document.getElementById('s-report').addEventListener('change',e=>{sReport=e.target.files[0];if(sReport)document.getElementById('s-report-name').textContent=sReport.name;});
+  document.getElementById('s-syllabus').addEventListener('change',e=>{sSyllabus=e.target.files[0];if(sSyllabus)document.getElementById('s-syllabus-name').textContent=sSyllabus.name;});
 
-  let settingsReportFile = null, settingsSyllabusFile = null;
-  document.getElementById('settings-report').addEventListener('change', e => {
-    settingsReportFile = e.target.files[0];
-    if (settingsReportFile) document.getElementById('settings-report-name').textContent = settingsReportFile.name;
-  });
-  document.getElementById('settings-syllabus').addEventListener('change', e => {
-    settingsSyllabusFile = e.target.files[0];
-    if (settingsSyllabusFile) document.getElementById('settings-syllabus-name').textContent = settingsSyllabusFile.name;
-  });
-
-  document.getElementById('settings-regenerate').addEventListener('click', async () => {
-    if (!USER.apiKey) { alert('Add a Groq API key first.'); return; }
+  document.getElementById('s-regen').addEventListener('click',async()=>{
+    if(!USER.apiKey){alert('Add a Groq API key first.');return;}
     closeSettings();
-    let reportText = USER.reportCardText || '';
-    let syllabusText = USER.syllabusText || '';
-    if (settingsReportFile) reportText = await extractFileText(settingsReportFile, 'report');
-    if (settingsSyllabusFile) syllabusText = await extractFileText(settingsSyllabusFile, 'syllabus');
-    const plan = await generatePlan(USER.name, reportText, syllabusText);
-    if (plan) {
-      USER.plan = plan; USER.reportCardText = reportText; USER.syllabusText = syllabusText;
-      S.set('mz-user', USER);
-      initPlan(); initCSRoadmap(); initProjects();
-      alert('Plan regenerated!');
-    }
+    let rt=USER.reportText||'',st=USER.syllabusText||'';
+    if(sReport)rt=await extractDoc(sReport,'report');
+    if(sSyllabus)st=await extractDoc(sSyllabus,'syllabus');
+    const plan=await generatePlan({name:USER.name,grade:USER.grade,hours:USER.hours,days:USER.days,focus:USER.focus,style:USER.style,coaching:USER.coaching},rt,st,'');
+    if(plan){USER.plan=plan;USER.reportText=rt;USER.syllabusText=st;S.set('mz',USER);initPlan();initCS();initProjects();alert('Plan regenerated!');}
   });
 
-  document.getElementById('settings-reset').addEventListener('click', () => {
-    if (confirm('Reset everything? This cannot be undone.')) {
-      localStorage.clear();
-      location.reload();
-    }
+  document.getElementById('s-reset').addEventListener('click',()=>{
+    if(confirm('Reset everything? This cannot be undone.')){localStorage.clear();location.reload();}
   });
 }
 
-/* ── Reward modal ─────────────────────────────────────────────────────────── */
-const EMOJIS = ['🎉','🔥','⚡','🏆','✨','🎯','💪','🌟'];
-
-async function showReward(day) {
-  const overlay = document.getElementById('reward-overlay');
-  overlay.style.display = 'flex';
-  document.getElementById('reward-emoji').textContent = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
-  document.getElementById('reward-msg').textContent = `every task done for ${day.name.toLowerCase()}.`;
-
-  const streak = getStreak();
-  const aiEl = document.getElementById('reward-ai');
-  aiEl.textContent = '…';
-
-  const reply = await groq([
-    { role: 'system', content: `You are a study coach for ${USER.name}. Be warm, brief, genuine.` },
-    { role: 'user', content: `${USER.name} just completed every task for ${day.name}. Their current streak is ${streak.current} day${streak.current !== 1 ? 's' : ''}. One sentence — genuine, not generic.` }
-  ], 100);
-
-  aiEl.textContent = reply || `full day done — that\'s the habit being built.`;
-
-  document.getElementById('reward-close').addEventListener('click', () => {
-    overlay.style.display = 'none';
-  }, { once: true });
+/* ── Reward ────────────────────────────────────────────── */
+const EMOJIS=['🎉','🔥','⚡','🏆','✨','🎯','💪','🌟'];
+async function showReward(day){
+  const scrim=document.getElementById('reward-scrim');
+  scrim.style.display='flex';
+  document.getElementById('reward-emoji').textContent=EMOJIS[Math.floor(Math.random()*EMOJIS.length)];
+  document.getElementById('reward-sub').textContent=`every task done for ${day.name.toLowerCase()}.`;
+  const ai=document.getElementById('reward-ai');ai.textContent='…';
+  const st=getStreak();
+  const r=await groq([
+    {role:'system',content:`Study coach for ${USER.name}. Warm, brief, genuine.`},
+    {role:'user',content:`${USER.name} just completed every task for ${day.name}. Streak: ${st.current} day${st.current!==1?'s':''}. One sentence — genuine, specific to what they did, not generic.`}
+  ],80);
+  ai.textContent=r||'full day done — that\'s the habit being built.';
+  document.getElementById('reward-close').addEventListener('click',()=>scrim.style.display='none',{once:true});
 }
 
-/* ── Bootstrap ────────────────────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
-  const saved = S.get('mz-user');
-  if (saved?.plan) {
-    USER = saved;
-    applyTheme(USER.theme || 'light');
+/* ── Boot ──────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded',()=>{
+  const saved=S.get('mz');
+  if(saved?.plan){
+    USER=saved;
+    applyTheme(USER.theme||'light');
     launchApp();
   } else {
-    document.getElementById('onboarding').style.display = 'flex';
+    document.getElementById('onboarding').style.display='flex';
     applyTheme('light');
     initOnboarding();
   }

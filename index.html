@@ -2,529 +2,572 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>meridian zenith</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <title>meridian</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body data-theme="light">
 
-  <!-- ── ONBOARDING ─────────────────────────────────────────────────────────── -->
-  <div id="onboarding" class="onboarding-wrap" style="display:none">
-    <div class="ob-inner">
-      <div class="ob-logo">
-        <svg width="140" height="36" viewBox="0 0 140 36">
-          <line x1="8"  y1="28" x2="20" y2="22" stroke="var(--accent)" stroke-width="0.9" opacity="0.4"/>
-          <line x1="20" y1="22" x2="32" y2="10" stroke="var(--accent)" stroke-width="0.9" opacity="0.4"/>
-          <line x1="32" y1="10" x2="46" y2="4"  stroke="var(--accent)" stroke-width="0.9" opacity="0.4"/>
-          <line x1="46" y1="4"  x2="56" y2="14" stroke="var(--accent)" stroke-width="0.9" opacity="0.4"/>
-          <line x1="56" y1="14" x2="46" y2="26" stroke="var(--accent)" stroke-width="0.9" opacity="0.4"/>
-          <line x1="46" y1="26" x2="32" y2="10" stroke="var(--accent)" stroke-width="0.9" opacity="0.15"/>
-          <circle cx="8"  cy="28" r="2"   fill="var(--accent)" opacity="0.35"/>
-          <circle cx="20" cy="22" r="2.5" fill="var(--accent)" opacity="0.6"/>
-          <circle cx="32" cy="10" r="3"   fill="var(--accent)"/>
-          <circle cx="46" cy="4"  r="4"   fill="var(--accent)"/>
-          <circle cx="56" cy="14" r="2.5" fill="var(--accent)" opacity="0.6"/>
-          <circle cx="46" cy="26" r="2"   fill="var(--accent)" opacity="0.35"/>
-          <text x="68" y="20" font-family="DM Sans, sans-serif" font-size="16" font-weight="300" fill="var(--text)" letter-spacing="-0.3px">meridian zenith</text>
-        </svg>
+<!-- ████  ONBOARDING  ████ -->
+<div id="onboarding" class="ob-shell" style="display:none">
+  <div class="ob-card">
+
+    <div class="ob-logo">
+      <svg width="110" height="28" viewBox="0 0 110 28">
+        <line x1="4" y1="22" x2="14" y2="14" stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
+        <line x1="14" y1="14" x2="24" y2="6"  stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
+        <line x1="24" y1="6"  x2="36" y2="2"  stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
+        <line x1="36" y1="2"  x2="44" y2="10" stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
+        <line x1="44" y1="10" x2="36" y2="20" stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
+        <line x1="36" y1="20" x2="24" y2="6"  stroke="var(--a)" stroke-width="0.8" opacity="0.15"/>
+        <circle cx="4"  cy="22" r="1.5" fill="var(--a)" opacity="0.3"/>
+        <circle cx="14" cy="14" r="2"   fill="var(--a)" opacity="0.55"/>
+        <circle cx="24" cy="6"  r="2.5" fill="var(--a)"/>
+        <circle cx="36" cy="2"  r="3.5" fill="var(--a)"/>
+        <circle cx="44" cy="10" r="2"   fill="var(--a)" opacity="0.55"/>
+        <circle cx="36" cy="20" r="1.5" fill="var(--a)" opacity="0.3"/>
+        <text x="54" y="16" font-family="Inter,sans-serif" font-size="13" font-weight="300" fill="var(--tx)" letter-spacing="-0.3px">meridian</text>
+      </svg>
+    </div>
+
+    <div class="ob-progress-bar"><div class="ob-progress-fill" id="ob-progress-fill"></div></div>
+
+    <div class="ob-steps-wrap" id="ob-steps-wrap">
+
+      <!-- 1 name -->
+      <div class="ob-step active" id="ob-s1">
+        <p class="ob-eyebrow">welcome</p>
+        <h2 class="ob-h">what's your name?</h2>
+        <p class="ob-sub">we'll build everything around you</p>
+        <input id="ob-name" class="ob-input" type="text" placeholder="first name" autocomplete="off"/>
+        <button class="ob-btn-primary" id="ob-n1">continue</button>
       </div>
 
-      <div class="ob-steps">
-
-        <!-- Step 1: Name -->
-        <div class="ob-step active" id="ob-step-1">
-          <h2 class="ob-title">what's your name?</h2>
-          <p class="ob-sub">we'll personalise everything around you</p>
-          <input type="text" id="ob-name" class="ob-input" placeholder="your first name" autocomplete="off"/>
-          <button class="ob-btn" id="ob-next-1">continue →</button>
+      <!-- 2 have a plan? -->
+      <div class="ob-step" id="ob-s2">
+        <p class="ob-eyebrow">setup</p>
+        <h2 class="ob-h">do you already have a study schedule?</h2>
+        <p class="ob-sub">we'll build the app around it — or generate one from scratch</p>
+        <div class="ob-fork">
+          <button class="ob-fork-btn" id="ob-fork-yes">
+            <span class="ob-fork-icon">📋</span>
+            <span class="ob-fork-title">yes, i have one</span>
+            <span class="ob-fork-sub">upload it and we'll use it</span>
+          </button>
+          <button class="ob-fork-btn" id="ob-fork-no">
+            <span class="ob-fork-icon">✨</span>
+            <span class="ob-fork-title">no, generate one for me</span>
+            <span class="ob-fork-sub">answer a few questions first</span>
+          </button>
         </div>
+      </div>
 
-        <!-- Step 2: Grade -->
-        <div class="ob-step" id="ob-step-2">
-          <h2 class="ob-title">what grade are you in?</h2>
-          <p class="ob-sub">helps calibrate difficulty and curriculum expectations</p>
-          <div class="ob-chip-grid" id="ob-grade-grid">
-            <button class="ob-chip" data-val="Grade 6">Grade 6</button>
-            <button class="ob-chip" data-val="Grade 7">Grade 7</button>
-            <button class="ob-chip" data-val="Grade 8">Grade 8</button>
+      <!-- 3A upload existing plan -->
+      <div class="ob-step" id="ob-s3a">
+        <p class="ob-eyebrow">your schedule</p>
+        <h2 class="ob-h">upload your study schedule</h2>
+        <p class="ob-sub">PDF or image — AI will read it and build the app around your existing plan</p>
+        <label class="ob-upload" id="ob-existing-label">
+          <input type="file" id="ob-existing-file" accept=".pdf,.jpg,.jpeg,.png" class="ob-file"/>
+          <div class="ob-upload-inner">
+            <span class="ob-upload-icon">↑</span>
+            <span id="ob-existing-name">tap to upload</span>
           </div>
-          <button class="ob-btn" id="ob-next-2">continue →</button>
-        </div>
+        </label>
+        <button class="ob-btn-primary" id="ob-n3a">continue</button>
+      </div>
 
-        <!-- Step 3: Study hours -->
-        <div class="ob-step" id="ob-step-3">
-          <h2 class="ob-title">how many hours can you study per day?</h2>
-          <p class="ob-sub">be realistic — consistent 45 minutes beats inconsistent 3 hours</p>
-          <div class="ob-chip-grid">
-            <button class="ob-chip" data-val="30 minutes">30 min</button>
-            <button class="ob-chip" data-val="45 minutes">45 min</button>
-            <button class="ob-chip" data-val="1 hour">1 hour</button>
-            <button class="ob-chip" data-val="1.5 hours">1.5 hrs</button>
-            <button class="ob-chip" data-val="2 hours">2 hours</button>
-          </div>
-          <input type="text" id="ob-hours-custom" class="ob-input" placeholder="or type your own…" style="margin-top:0.5rem"/>
-          <button class="ob-btn" id="ob-next-3">continue →</button>
+      <!-- 3B grade -->
+      <div class="ob-step" id="ob-s3b">
+        <p class="ob-eyebrow">about you</p>
+        <h2 class="ob-h">what grade are you in?</h2>
+        <div class="ob-chips" id="ob-grade-chips">
+          <button class="ob-chip" data-val="Grade 6">Grade 6</button>
+          <button class="ob-chip" data-val="Grade 7">Grade 7</button>
+          <button class="ob-chip" data-val="Grade 8">Grade 8</button>
         </div>
+        <button class="ob-btn-primary" id="ob-n3b">continue</button>
+      </div>
 
-        <!-- Step 4: Study days -->
-        <div class="ob-step" id="ob-step-4">
-          <h2 class="ob-title">which days do you study?</h2>
-          <p class="ob-sub">select all that apply</p>
-          <div class="ob-chip-grid">
-            <button class="ob-chip ob-chip-toggle" data-val="Monday">mon</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Tuesday">tue</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Wednesday">wed</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Thursday">thu</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Friday">fri</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Saturday">sat</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Sunday">sun</button>
-          </div>
-          <button class="ob-btn" id="ob-next-4">continue →</button>
+      <!-- 4 hours -->
+      <div class="ob-step" id="ob-s4">
+        <p class="ob-eyebrow">your time</p>
+        <h2 class="ob-h">how much can you study per day?</h2>
+        <p class="ob-sub">be honest — 45 consistent minutes beats 3 inconsistent hours</p>
+        <div class="ob-chips" id="ob-hours-chips">
+          <button class="ob-chip" data-val="30 minutes">30 min</button>
+          <button class="ob-chip" data-val="45 minutes">45 min</button>
+          <button class="ob-chip" data-val="1 hour">1 hour</button>
+          <button class="ob-chip" data-val="1.5 hours">1.5 hrs</button>
+          <button class="ob-chip" data-val="2 hours">2 hours</button>
         </div>
+        <input id="ob-hours-custom" class="ob-input" type="text" placeholder="or type your own…"/>
+        <button class="ob-btn-primary" id="ob-n4">continue</button>
+      </div>
 
-        <!-- Step 5: Focus areas -->
-        <div class="ob-step" id="ob-step-5">
-          <h2 class="ob-title">what are your main focus areas?</h2>
-          <p class="ob-sub">select the subjects you most want to improve</p>
-          <div class="ob-chip-grid">
-            <button class="ob-chip ob-chip-toggle" data-val="English">English</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Mathematics">Maths</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Science">Science</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Physics">Physics</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Chemistry">Chemistry</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Biology">Biology</button>
-            <button class="ob-chip ob-chip-toggle" data-val="History">History</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Geography">Geography</button>
-            <button class="ob-chip ob-chip-toggle" data-val="Computer Science">CS</button>
-            <button class="ob-chip ob-chip-toggle" data-val="French">French</button>
-          </div>
-          <button class="ob-btn" id="ob-next-5">continue →</button>
+      <!-- 5 days -->
+      <div class="ob-step" id="ob-s5">
+        <p class="ob-eyebrow">your schedule</p>
+        <h2 class="ob-h">which days do you study?</h2>
+        <div class="ob-chips multi" id="ob-days-chips">
+          <button class="ob-chip" data-val="Monday">mon</button>
+          <button class="ob-chip" data-val="Tuesday">tue</button>
+          <button class="ob-chip" data-val="Wednesday">wed</button>
+          <button class="ob-chip" data-val="Thursday">thu</button>
+          <button class="ob-chip" data-val="Friday">fri</button>
+          <button class="ob-chip" data-val="Saturday">sat</button>
+          <button class="ob-chip" data-val="Sunday">sun</button>
         </div>
+        <button class="ob-btn-primary" id="ob-n5">continue</button>
+      </div>
 
-        <!-- Step 6: Study style -->
-        <div class="ob-step" id="ob-step-6">
-          <h2 class="ob-title">how do you learn best?</h2>
-          <p class="ob-sub">pick your top style — we'll lean tasks toward it</p>
-          <div class="ob-chip-grid">
-            <button class="ob-chip" data-val="visual learner — diagrams, mind maps, colour-coding">visual</button>
-            <button class="ob-chip" data-val="practice problems — learning by doing and drilling">practice problems</button>
-            <button class="ob-chip" data-val="reading and notes — deep reading and detailed notes">reading & notes</button>
-            <button class="ob-chip" data-val="teaching back — explaining concepts out loud to myself">teach it back</button>
-            <button class="ob-chip" data-val="mixed — a balance of all styles">mixed</button>
-          </div>
-          <button class="ob-btn" id="ob-next-6">continue →</button>
+      <!-- 6 focus -->
+      <div class="ob-step" id="ob-s6">
+        <p class="ob-eyebrow">priorities</p>
+        <h2 class="ob-h">what subjects do you most want to improve?</h2>
+        <div class="ob-chips multi" id="ob-focus-chips">
+          <button class="ob-chip" data-val="English">English</button>
+          <button class="ob-chip" data-val="Mathematics">Maths</button>
+          <button class="ob-chip" data-val="Physics">Physics</button>
+          <button class="ob-chip" data-val="Chemistry">Chemistry</button>
+          <button class="ob-chip" data-val="Biology">Biology</button>
+          <button class="ob-chip" data-val="History">History</button>
+          <button class="ob-chip" data-val="Geography">Geography</button>
+          <button class="ob-chip" data-val="Computer Science">CS</button>
+          <button class="ob-chip" data-val="French">French</button>
+          <button class="ob-chip" data-val="Science">Science</button>
         </div>
+        <button class="ob-btn-primary" id="ob-n6">continue</button>
+        <button class="ob-btn-ghost" id="ob-skip6">skip</button>
+      </div>
 
-        <!-- Step 7: Coaching -->
-        <div class="ob-step" id="ob-step-7">
-          <h2 class="ob-title">any coaching or tutoring outside school?</h2>
-          <p class="ob-sub">we'll avoid overlapping with what you're already getting help on</p>
-          <textarea id="ob-coaching" class="ob-input ob-textarea" placeholder="e.g. English tutor twice a week, Maths coaching on Saturdays — or leave blank if none" rows="3"></textarea>
-          <button class="ob-btn" id="ob-next-7">continue →</button>
-          <button class="ob-skip" id="ob-skip-7">none, skip</button>
+      <!-- 7 style -->
+      <div class="ob-step" id="ob-s7">
+        <p class="ob-eyebrow">how you learn</p>
+        <h2 class="ob-h">how do you learn best?</h2>
+        <div class="ob-chips" id="ob-style-chips">
+          <button class="ob-chip" data-val="visual — diagrams, maps, colour-coding">visual</button>
+          <button class="ob-chip" data-val="practice problems — drilling and doing">problems</button>
+          <button class="ob-chip" data-val="reading and notes — deep reading, detailed notes">reading</button>
+          <button class="ob-chip" data-val="teaching back — explaining out loud">teach back</button>
+          <button class="ob-chip" data-val="mixed approach">mixed</button>
         </div>
+        <button class="ob-btn-primary" id="ob-n7">continue</button>
+      </div>
 
-        <!-- Step 8: Report card -->
-        <div class="ob-step" id="ob-step-8">
-          <h2 class="ob-title">upload your report card</h2>
-          <p class="ob-sub">AI reads your grades and teacher comments to understand exactly where to focus</p>
-          <label class="ob-upload-label">
-            <input type="file" id="ob-report" accept=".pdf,.jpg,.jpeg,.png" class="ob-file-input"/>
+      <!-- 8 coaching -->
+      <div class="ob-step" id="ob-s8">
+        <p class="ob-eyebrow">outside school</p>
+        <h2 class="ob-h">any tutoring or coaching outside school?</h2>
+        <p class="ob-sub">we'll avoid overlapping with what you're already getting help on</p>
+        <textarea id="ob-coaching" class="ob-input ob-textarea" placeholder="e.g. English tutor twice a week, Maths coaching Saturday — or leave blank"></textarea>
+        <button class="ob-btn-primary" id="ob-n8">continue</button>
+        <button class="ob-btn-ghost" id="ob-skip8">none, skip</button>
+      </div>
+
+      <!-- 9 report card -->
+      <div class="ob-step" id="ob-s9">
+        <p class="ob-eyebrow">your results</p>
+        <h2 class="ob-h">upload your report card</h2>
+        <p class="ob-sub">AI reads your grades and teacher comments to know exactly where to focus</p>
+        <label class="ob-upload" id="ob-report-label">
+          <input type="file" id="ob-report-file" accept=".pdf,.jpg,.jpeg,.png" class="ob-file"/>
+          <div class="ob-upload-inner">
             <span class="ob-upload-icon">↑</span>
             <span id="ob-report-name">tap to upload PDF or image</span>
-          </label>
-          <button class="ob-btn" id="ob-next-8">continue →</button>
-          <button class="ob-skip" id="ob-skip-8">skip for now</button>
-        </div>
+          </div>
+        </label>
+        <button class="ob-btn-primary" id="ob-n9">continue</button>
+        <button class="ob-btn-ghost" id="ob-skip9">skip for now</button>
+      </div>
 
-        <!-- Step 9: Syllabus -->
-        <div class="ob-step" id="ob-step-9">
-          <h2 class="ob-title">upload your syllabus</h2>
-          <p class="ob-sub">course planners, timetables — anything showing what you study this term</p>
-          <label class="ob-upload-label">
-            <input type="file" id="ob-syllabus" accept=".pdf,.jpg,.jpeg,.png" class="ob-file-input"/>
+      <!-- 10 syllabus -->
+      <div class="ob-step" id="ob-s10">
+        <p class="ob-eyebrow">your curriculum</p>
+        <h2 class="ob-h">upload your syllabus or course planner</h2>
+        <p class="ob-sub">any document showing what you study this term — used to make tasks syllabus-specific</p>
+        <label class="ob-upload" id="ob-syllabus-label">
+          <input type="file" id="ob-syllabus-file" accept=".pdf,.jpg,.jpeg,.png" class="ob-file"/>
+          <div class="ob-upload-inner">
             <span class="ob-upload-icon">↑</span>
             <span id="ob-syllabus-name">tap to upload PDF or image</span>
-          </label>
-          <button class="ob-btn" id="ob-next-9">continue →</button>
-          <button class="ob-skip" id="ob-skip-9">skip for now</button>
-        </div>
-
-        <!-- Step 10: API Key -->
-        <div class="ob-step" id="ob-step-10">
-          <h2 class="ob-title">add your groq api key</h2>
-          <p class="ob-sub">free at <strong>console.groq.com</strong> — powers everything AI. stored only in your browser, never shared.</p>
-          <input type="password" id="ob-apikey" class="ob-input" placeholder="gsk_…" autocomplete="off"/>
-          <button class="ob-btn" id="ob-next-10">build my plan →</button>
-          <button class="ob-skip" id="ob-skip-10">skip — use without AI</button>
-        </div>
-
-        <!-- Step 11: Generating -->
-        <div class="ob-step" id="ob-step-11">
-          <div class="ob-generating">
-            <div class="ob-spinner"></div>
-            <h2 class="ob-title" id="ob-gen-title">building your plan…</h2>
-            <p class="ob-sub" id="ob-gen-sub">reading your documents and generating a personalised study schedule</p>
-            <div class="ob-gen-steps" id="ob-gen-steps"></div>
           </div>
+        </label>
+        <button class="ob-btn-primary" id="ob-n10">continue</button>
+        <button class="ob-btn-ghost" id="ob-skip10">skip for now</button>
+      </div>
+
+      <!-- 11 api key -->
+      <div class="ob-step" id="ob-s11">
+        <p class="ob-eyebrow">ai</p>
+        <h2 class="ob-h">add your groq api key</h2>
+        <p class="ob-sub">free at <strong>console.groq.com</strong> — powers AI tips, content generation, and your personalised plan. stays in your browser only.</p>
+        <input id="ob-apikey" class="ob-input" type="password" placeholder="gsk_…" autocomplete="off"/>
+        <button class="ob-btn-primary" id="ob-n11">build my plan →</button>
+        <button class="ob-btn-ghost" id="ob-skip11">skip — use without AI</button>
+      </div>
+
+      <!-- 12 generating -->
+      <div class="ob-step" id="ob-s12">
+        <div class="ob-generating">
+          <div class="ob-spinner"></div>
+          <h2 class="ob-h" id="ob-gen-h">building your plan…</h2>
+          <p class="ob-sub" id="ob-gen-sub">this takes about 15 seconds</p>
+          <div class="ob-gen-list" id="ob-gen-list"></div>
         </div>
-
       </div>
 
-      <div class="ob-progress">
-        <div class="ob-prog-bar" id="ob-prog-bar"></div>
-      </div>
     </div>
   </div>
+</div>
 
-  <!-- ── MAIN APP ────────────────────────────────────────────────────────────── -->
-  <div id="app" style="display:none">
+<!-- ████  APP  ████ -->
+<div id="app" class="app-shell" style="display:none">
 
-    <header class="site-header">
-      <div class="header-inner">
-        <div class="header-logo">
-          <svg width="120" height="30" viewBox="0 0 120 30">
-            <line x1="6"  y1="24" x2="16" y2="18" stroke="var(--accent-light)" stroke-width="0.9" opacity="0.5"/>
-            <line x1="16" y1="18" x2="26" y2="8"  stroke="var(--accent-light)" stroke-width="0.9" opacity="0.5"/>
-            <line x1="26" y1="8"  x2="38" y2="3"  stroke="var(--accent-light)" stroke-width="0.9" opacity="0.5"/>
-            <line x1="38" y1="3"  x2="46" y2="12" stroke="var(--accent-light)" stroke-width="0.9" opacity="0.5"/>
-            <line x1="46" y1="12" x2="38" y2="22" stroke="var(--accent-light)" stroke-width="0.9" opacity="0.5"/>
-            <line x1="38" y1="22" x2="26" y2="8"  stroke="var(--accent-light)" stroke-width="0.9" opacity="0.2"/>
-            <circle cx="6"  cy="24" r="1.5" fill="var(--accent-light)" opacity="0.4"/>
-            <circle cx="16" cy="18" r="2"   fill="var(--accent-light)" opacity="0.65"/>
-            <circle cx="26" cy="8"  r="2.5" fill="var(--accent-light)"/>
-            <circle cx="38" cy="3"  r="3.5" fill="var(--accent-light)"/>
-            <circle cx="46" cy="12" r="2"   fill="var(--accent-light)" opacity="0.65"/>
-            <circle cx="38" cy="22" r="1.5" fill="var(--accent-light)" opacity="0.4"/>
-            <text x="56" y="17" font-family="DM Sans, sans-serif" font-size="14" font-weight="300" fill="var(--header-text)" letter-spacing="-0.2px">meridian zenith</text>
-          </svg>
-        </div>
-        <div class="header-right">
-          <span class="header-greeting" id="header-greeting"></span>
-          <button class="header-icon-btn" id="settings-btn" title="Settings">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </header>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <svg width="100" height="26" viewBox="0 0 100 26">
+        <line x1="4" y1="20" x2="12" y2="13" stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
+        <line x1="12" y1="13" x2="20" y2="6"  stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
+        <line x1="20" y1="6"  x2="30" y2="2"  stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
+        <line x1="30" y1="2"  x2="38" y2="9"  stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
+        <line x1="38" y1="9"  x2="30" y2="19" stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
+        <line x1="30" y1="19" x2="20" y2="6"  stroke="var(--a-l)" stroke-width="0.8" opacity="0.18"/>
+        <circle cx="4"  cy="20" r="1.5" fill="var(--a-l)" opacity="0.3"/>
+        <circle cx="12" cy="13" r="2"   fill="var(--a-l)" opacity="0.6"/>
+        <circle cx="20" cy="6"  r="2.5" fill="var(--a-l)"/>
+        <circle cx="30" cy="2"  r="3.5" fill="var(--a-l)"/>
+        <circle cx="38" cy="9"  r="2"   fill="var(--a-l)" opacity="0.6"/>
+        <circle cx="30" cy="19" r="1.5" fill="var(--a-l)" opacity="0.3"/>
+        <text x="46" y="15" font-family="Inter,sans-serif" font-size="12" font-weight="300" fill="rgba(255,255,255,0.8)" letter-spacing="-0.2px">meridian</text>
+      </svg>
+    </div>
 
-    <nav class="tab-nav" id="tab-nav">
-      <div class="tab-nav-inner">
-        <button class="tab-btn active" data-tab="session">session</button>
-        <button class="tab-btn" data-tab="plan">my plan</button>
-        <button class="tab-btn" data-tab="cs">cs roadmap</button>
-        <button class="tab-btn" data-tab="projects">projects</button>
-      </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-tab="session">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+        <span>session</span>
+      </button>
+      <button class="nav-item" data-tab="plan">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>my plan</span>
+      </button>
+      <button class="nav-item" data-tab="cs">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>
+        <span>cs roadmap</span>
+      </button>
+      <button class="nav-item" data-tab="projects">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <span>projects</span>
+      </button>
     </nav>
 
-    <main class="main-content">
+    <div class="sidebar-bottom">
+      <div class="sidebar-greeting" id="sidebar-greeting"></div>
+      <button class="sidebar-settings-btn" id="settings-open-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        settings
+      </button>
+    </div>
+  </aside>
 
-      <!-- SESSION TAB -->
-      <section id="tab-session" class="tab-section active">
-        <div class="session-layout">
+  <!-- Mobile top bar -->
+  <div class="mobile-bar">
+    <div class="mobile-logo">
+      <svg width="80" height="22" viewBox="0 0 80 22">
+        <circle cx="8" cy="11" r="3" fill="var(--a)"/>
+        <circle cx="18" cy="5"  r="4" fill="var(--a)"/>
+        <circle cx="28" cy="11" r="2.5" fill="var(--a)" opacity="0.6"/>
+        <line x1="8" y1="11" x2="18" y2="5"  stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
+        <line x1="18" y1="5"  x2="28" y2="11" stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
+        <text x="36" y="15" font-family="Inter,sans-serif" font-size="12" font-weight="300" fill="var(--tx)" letter-spacing="-0.2px">meridian</text>
+      </svg>
+    </div>
+    <div class="mobile-nav">
+      <button class="mob-nav active" data-tab="session">session</button>
+      <button class="mob-nav" data-tab="plan">plan</button>
+      <button class="mob-nav" data-tab="cs">cs</button>
+      <button class="mob-nav" data-tab="projects">projects</button>
+    </div>
+    <button class="mobile-settings-btn" id="mobile-settings-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
 
-          <!-- Left column -->
-          <div class="session-col-left">
+  <!-- Main content area -->
+  <div class="main-area">
 
-            <!-- Today card -->
-            <div class="card" id="today-card">
-              <div class="card-top-row">
-                <span class="card-label">today</span>
-                <div id="streak-display" class="streak-mini"></div>
-              </div>
-              <div class="today-day-name" id="today-day-name"></div>
-              <div class="today-date" id="today-date"></div>
-              <div class="today-subjects" id="today-subjects"></div>
-              <button class="btn-primary btn-sm" id="go-today-btn">open today's plan →</button>
+    <!-- SESSION -->
+    <div id="tab-session" class="tab active">
+      <div class="session-grid">
+
+        <!-- Col 1: Today + Countdown + Music -->
+        <div class="col col-1">
+
+          <div class="panel" id="today-panel">
+            <div class="panel-row">
+              <span class="eyebrow">today</span>
+              <div id="streak-widget" class="streak-widget"></div>
             </div>
-
-            <!-- Countdown card -->
-            <div class="card">
-              <span class="card-label">term 1</span>
-              <div class="countdown-row">
-                <div class="countdown-stat">
-                  <span class="countdown-num" id="cd-days">—</span>
-                  <span class="countdown-unit">days left</span>
-                </div>
-                <div class="countdown-stat">
-                  <span class="countdown-num" id="cd-weeks">—</span>
-                  <span class="countdown-unit">weeks</span>
-                </div>
-                <div class="countdown-stat">
-                  <span class="countdown-num" id="cd-pct">—</span>
-                  <span class="countdown-unit">% done</span>
-                </div>
-              </div>
-              <div class="progress-bar-wrap">
-                <div class="progress-bar-fill" id="cd-bar"></div>
-              </div>
-              <p class="countdown-meta" id="cd-meta"></p>
-            </div>
-
-            <!-- Music card -->
-            <div class="card music-card">
-              <div class="card-top-row">
-                <span class="card-label">ambient sound</span>
-                <div class="music-vol-row">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                  <input type="range" id="music-vol" class="vol-slider" min="0" max="1" step="0.05" value="0.4"/>
-                </div>
-              </div>
-              <div class="music-btns">
-                <button class="music-btn" data-sound="none" id="sound-none">off</button>
-                <button class="music-btn active" data-sound="brown">brown noise</button>
-                <button class="music-btn" data-sound="rain">rain</button>
-                <button class="music-btn" data-sound="focus">focus</button>
-              </div>
-            </div>
+            <div class="today-day" id="today-day"></div>
+            <div class="today-date-str" id="today-date-str"></div>
+            <div id="today-subjects-list" class="today-subjects-list"></div>
+            <button class="btn-accent btn-sm mt-auto" id="go-today-btn">open today's plan →</button>
           </div>
 
-          <!-- Middle column: timer -->
-          <div class="session-col-mid">
-            <div class="card timer-card">
-              <span class="card-label">timer</span>
-              <div class="timer-presets">
-                <button class="preset-btn active" data-mins="15">15</button>
-                <button class="preset-btn" data-mins="25">25</button>
-                <button class="preset-btn" data-mins="30">30</button>
-                <button class="preset-btn" data-mins="60">60</button>
-                <button class="preset-btn" data-mins="0">custom</button>
-              </div>
-              <input type="number" id="custom-mins" class="custom-mins-input" placeholder="minutes" min="1" max="180"/>
-              <div class="timer-ring-wrap">
-                <svg class="timer-ring" viewBox="0 0 120 120">
-                  <circle class="timer-ring-bg" cx="60" cy="60" r="52"/>
-                  <circle class="timer-ring-prog" id="timer-ring-prog" cx="60" cy="60" r="52"/>
-                </svg>
-                <div class="timer-display" id="timer-display">15:00</div>
-              </div>
-              <input type="text" id="timer-subject" class="timer-subject-input" placeholder="what are you working on?"/>
-              <div class="timer-controls">
-                <button class="btn-primary" id="timer-start">start</button>
-                <button class="btn-ghost" id="timer-reset">reset</button>
-              </div>
-              <div class="session-log">
-                <span class="card-label">session log</span>
-                <div id="session-log-entries"><p class="log-empty">no sessions yet</p></div>
-              </div>
+          <div class="panel">
+            <span class="eyebrow">term 1</span>
+            <div class="countdown-row">
+              <div class="cd-stat"><span class="cd-num" id="cd-days">—</span><span class="cd-lbl">days</span></div>
+              <div class="cd-stat"><span class="cd-num" id="cd-weeks">—</span><span class="cd-lbl">weeks</span></div>
+              <div class="cd-stat"><span class="cd-num" id="cd-pct">—</span><span class="cd-lbl">% done</span></div>
             </div>
+            <div class="progress-track"><div class="progress-fill" id="cd-bar"></div></div>
+            <p class="cd-meta" id="cd-meta"></p>
           </div>
 
-          <!-- Right column: checklist + detail -->
-          <div class="session-col-right">
-            <div class="checklist-split">
-              <!-- Checklist -->
-              <div class="card checklist-card">
-                <div class="card-top-row">
-                  <span class="card-label">today's tasks</span>
-                  <span class="progress-summary" id="progress-summary">0 / 0</span>
-                </div>
-                <div class="progress-bar-wrap">
-                  <div class="progress-bar-fill" id="progress-bar-fill"></div>
-                </div>
-                <div id="task-checklist" class="task-checklist"></div>
-                <button class="btn-ghost btn-xs" id="reset-tasks-btn">reset tasks</button>
+          <div class="panel music-panel">
+            <div class="panel-row">
+              <span class="eyebrow">ambient</span>
+              <div class="vol-row">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tx-3)" stroke-width="1.5" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>
+                <input type="range" id="vol-slider" class="vol-slider" min="0" max="1" step="0.05" value="0.35"/>
               </div>
-
-              <!-- Detail panel -->
-              <div class="card detail-card" id="detail-card">
-                <div class="detail-empty" id="detail-empty">
-                  <span>← tap a task</span>
-                </div>
-                <div id="detail-content" style="display:none">
-                  <div class="card-top-row">
-                    <span class="detail-subject-tag" id="detail-subject-tag"></span>
-                    <span class="detail-time" id="detail-time"></span>
-                  </div>
-                  <h3 class="detail-title" id="detail-title"></h3>
-                  <p class="detail-body" id="detail-body"></p>
-
-                  <!-- Generated content -->
-                  <div id="detail-gen-section" style="display:none">
-                    <div class="section-divider">
-                      <span class="card-label accent-label">✦ today's content</span>
-                      <button class="icon-btn" id="detail-gen-refresh">↻</button>
-                    </div>
-                    <div id="detail-gen-content" class="gen-content"></div>
-                  </div>
-
-                  <button class="btn-primary btn-sm" id="detail-timer-btn" style="display:none">▶ set timer & start</button>
-
-                  <!-- AI tip + chat -->
-                  <div id="detail-ai-section" style="display:none">
-                    <div class="section-divider">
-                      <span class="card-label accent-label">✦ ai tip</span>
-                      <button class="icon-btn" id="detail-tip-refresh">↻</button>
-                    </div>
-                    <div id="detail-ai-tip" class="ai-tip-text"></div>
-                    <div id="detail-chat-history" class="chat-history"></div>
-                    <div class="chat-input-row">
-                      <input type="text" id="detail-chat-input" class="chat-input" placeholder="ask a follow-up…"/>
-                      <button class="chat-send-btn" id="detail-chat-send">→</button>
-                    </div>
-                  </div>
-
-                  <!-- API key prompt -->
-                  <div id="detail-key-section" style="display:none" class="key-prompt">
-                    <p>add a groq api key in settings to enable ai tips</p>
-                    <button class="btn-ghost btn-sm" id="detail-goto-settings">open settings →</button>
-                  </div>
-                </div>
-              </div>
+            </div>
+            <div class="music-grid">
+              <button class="music-chip active" data-snd="none">off</button>
+              <button class="music-chip" data-snd="brown">brown noise</button>
+              <button class="music-chip" data-snd="rain">rain</button>
+              <button class="music-chip" data-snd="focus">focus tones</button>
             </div>
           </div>
 
         </div>
-      </section>
 
-      <!-- PLAN TAB -->
-      <section id="tab-plan" class="tab-section">
-        <div class="plan-header">
-          <h2 class="page-title" id="plan-title">your study plan</h2>
-          <p class="page-sub" id="plan-sub"></p>
-          <button class="btn-ghost btn-sm" id="regenerate-plan-btn">↻ regenerate plan</button>
+        <!-- Col 2: Timer -->
+        <div class="col col-2">
+          <div class="panel timer-panel">
+            <span class="eyebrow">timer</span>
+            <div class="presets">
+              <button class="preset active" data-m="15">15</button>
+              <button class="preset" data-m="25">25</button>
+              <button class="preset" data-m="30">30</button>
+              <button class="preset" data-m="60">60</button>
+              <button class="preset" data-m="0">custom</button>
+            </div>
+            <input type="number" id="custom-min" class="custom-min-input" placeholder="min" min="1" max="180"/>
+            <div class="ring-wrap">
+              <svg class="ring-svg" viewBox="0 0 120 120">
+                <circle class="ring-track" cx="60" cy="60" r="52"/>
+                <circle class="ring-prog" id="ring-prog" cx="60" cy="60" r="52"/>
+              </svg>
+              <span class="ring-time" id="ring-time">15:00</span>
+            </div>
+            <input type="text" id="timer-label" class="timer-label-input" placeholder="what are you working on?"/>
+            <div class="timer-btns">
+              <button class="btn-accent" id="timer-start">start</button>
+              <button class="btn-outline" id="timer-reset">reset</button>
+            </div>
+            <div class="session-log-wrap">
+              <span class="eyebrow">log</span>
+              <div id="session-log"><p class="empty-state">no sessions yet</p></div>
+            </div>
+          </div>
         </div>
 
-        <div class="day-tabs">
-          <button class="day-tab active" data-day="1">mon</button>
-          <button class="day-tab" data-day="2">tue</button>
-          <button class="day-tab" data-day="3">wed</button>
-          <button class="day-tab" data-day="4">thu</button>
-          <button class="day-tab" data-day="5">fri</button>
-          <button class="day-tab" data-day="6">sat</button>
+        <!-- Col 3: Checklist + Detail -->
+        <div class="col col-3">
+          <div class="checklist-detail-split">
+
+            <div class="panel checklist-panel">
+              <div class="panel-row">
+                <span class="eyebrow">tasks</span>
+                <span class="task-count" id="task-count">0 / 0</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="task-bar"></div></div>
+              <div id="task-list" class="task-list"></div>
+              <button class="btn-ghost btn-xs" id="reset-tasks">reset</button>
+            </div>
+
+            <div class="panel detail-panel" id="detail-panel">
+              <div class="detail-empty" id="detail-empty">← click a task</div>
+              <div id="detail-body-wrap" style="display:none">
+                <div class="panel-row">
+                  <span class="detail-chip" id="detail-chip"></span>
+                  <span class="detail-mins" id="detail-mins"></span>
+                </div>
+                <h3 class="detail-title" id="detail-title"></h3>
+                <p class="detail-desc" id="detail-desc"></p>
+
+                <div id="detail-gen-wrap" style="display:none">
+                  <div class="section-head">
+                    <span class="eyebrow accent">✦ today's content</span>
+                    <button class="icon-btn" id="detail-gen-refresh">↻</button>
+                  </div>
+                  <div id="detail-gen" class="gen-content"></div>
+                </div>
+
+                <button class="btn-accent btn-sm" id="detail-set-timer" style="display:none">▶ set timer & start</button>
+
+                <div id="detail-ai-wrap" style="display:none">
+                  <div class="section-head">
+                    <span class="eyebrow accent">✦ ai tip</span>
+                    <button class="icon-btn" id="detail-tip-refresh">↻</button>
+                  </div>
+                  <div id="detail-tip" class="ai-tip"></div>
+                  <div id="detail-chat-log" class="chat-log"></div>
+                  <div class="chat-row">
+                    <input type="text" id="detail-chat-in" class="chat-in" placeholder="ask a follow-up…"/>
+                    <button class="chat-send" id="detail-chat-send">→</button>
+                  </div>
+                </div>
+
+                <div id="detail-no-key" style="display:none" class="no-key-prompt">
+                  <p>add a groq key in settings to unlock ai tips</p>
+                  <button class="btn-ghost btn-sm" id="detail-open-settings">settings →</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
 
-        <div id="plan-day-content" class="plan-day-content"></div>
-      </section>
-
-      <!-- CS ROADMAP TAB -->
-      <section id="tab-cs" class="tab-section">
-        <div class="plan-header">
-          <h2 class="page-title">cs fundamentals roadmap</h2>
-          <p class="page-sub">term 1 — june to september — 16 weeks</p>
-        </div>
-        <div id="cs-roadmap-content" class="cs-roadmap"></div>
-      </section>
-
-      <!-- PROJECTS TAB -->
-      <section id="tab-projects" class="tab-section">
-        <div class="plan-header">
-          <h2 class="page-title">monthly projects</h2>
-          <p class="page-sub">one project per month — four saturdays each</p>
-        </div>
-        <div id="projects-content" class="projects-grid"></div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- ── SETTINGS PANEL ─────────────────────────────────────────────────────── -->
-  <div id="settings-overlay" class="overlay" style="display:none"></div>
-  <div id="settings-panel" class="settings-panel" style="display:none">
-    <div class="settings-header">
-      <h2 class="settings-title">settings</h2>
-      <button class="icon-btn" id="settings-close">✕</button>
+      </div>
     </div>
-    <div class="settings-body">
 
-      <div class="settings-section">
-        <span class="settings-label">name</span>
-        <input type="text" id="settings-name" class="ob-input"/>
-        <button class="btn-ghost btn-sm" id="settings-save-name">save</button>
+    <!-- PLAN -->
+    <div id="tab-plan" class="tab">
+      <div class="tab-header">
+        <h1 class="tab-title" id="plan-title">my plan</h1>
+        <p class="tab-sub" id="plan-sub"></p>
+        <button class="btn-outline btn-sm" id="regen-plan-btn">↻ regenerate</button>
       </div>
-
-      <div class="settings-section">
-        <span class="settings-label">daily study time</span>
-        <select id="settings-hours" class="ob-input">
-          <option>30 minutes</option>
-          <option>45 minutes</option>
-          <option selected>1 hour</option>
-          <option>1.5 hours</option>
-          <option>2 hours</option>
-        </select>
-      </div>
-
-      <div class="settings-section">
-        <span class="settings-label">focus areas</span>
-        <input type="text" id="settings-focus" class="ob-input" placeholder="e.g. English, Maths, Chemistry"/>
-      </div>
-
-      <div class="settings-section">
-        <span class="settings-label">coaching outside school</span>
-        <input type="text" id="settings-coaching" class="ob-input" placeholder="e.g. English tutor Tuesdays"/>
-      </div>
-
-      <div class="settings-section">
-        <span class="settings-label">groq api key</span>
-        <input type="password" id="settings-apikey" class="ob-input" placeholder="gsk_…"/>
-        <button class="btn-ghost btn-sm" id="settings-save-key">save</button>
-      </div>
-
-      <div class="settings-section">
-        <span class="settings-label">re-upload report card</span>
-        <label class="ob-upload-label small">
-          <input type="file" id="settings-report" accept=".pdf,.jpg,.jpeg,.png" class="ob-file-input"/>
-          <span id="settings-report-name">tap to upload</span>
-        </label>
-      </div>
-
-      <div class="settings-section">
-        <span class="settings-label">re-upload syllabus</span>
-        <label class="ob-upload-label small">
-          <input type="file" id="settings-syllabus" accept=".pdf,.jpg,.jpeg,.png" class="ob-file-input"/>
-          <span id="settings-syllabus-name">tap to upload</span>
-        </label>
-        <button class="btn-primary btn-sm" id="settings-regenerate">regenerate plan with new docs</button>
-      </div>
-
-      <div class="settings-section">
-        <span class="settings-label">theme</span>
-        <div class="theme-grid">
-          <button class="theme-swatch active" data-theme="light" title="light">
-            <span class="swatch-preview swatch-light"></span>light
-          </button>
-          <button class="theme-swatch" data-theme="dark" title="dark">
-            <span class="swatch-preview swatch-dark"></span>dark
-          </button>
-          <button class="theme-swatch" data-theme="forest" title="forest">
-            <span class="swatch-preview swatch-forest"></span>forest
-          </button>
-          <button class="theme-swatch" data-theme="ocean" title="ocean">
-            <span class="swatch-preview swatch-ocean"></span>ocean
-          </button>
-          <button class="theme-swatch" data-theme="midnight" title="midnight">
-            <span class="swatch-preview swatch-midnight"></span>midnight
-          </button>
-          <button class="theme-swatch" data-theme="warm" title="warm">
-            <span class="swatch-preview swatch-warm"></span>warm
-          </button>
-        </div>
-      </div>
-
-      <div class="settings-section settings-danger">
-        <span class="settings-label">reset</span>
-        <button class="btn-danger btn-sm" id="settings-reset">reset everything</button>
-      </div>
-
+      <div class="day-tabs" id="day-tabs"></div>
+      <div id="plan-day-view" class="plan-day-grid"></div>
     </div>
-  </div>
 
-  <!-- ── REWARD MODAL ───────────────────────────────────────────────────────── -->
-  <div id="reward-overlay" class="overlay" style="display:none">
-    <div class="reward-modal">
-      <div class="reward-emoji" id="reward-emoji">🎉</div>
-      <h2 class="reward-title">day complete</h2>
-      <p class="reward-msg" id="reward-msg">every task done.</p>
-      <div class="reward-ai" id="reward-ai"></div>
-      <button class="btn-primary" id="reward-close">close</button>
+    <!-- CS -->
+    <div id="tab-cs" class="tab">
+      <div class="tab-header">
+        <h1 class="tab-title">cs fundamentals</h1>
+        <p class="tab-sub">16-week self-study roadmap — beyond what school teaches</p>
+      </div>
+      <div id="cs-content" class="cs-grid"></div>
     </div>
-  </div>
 
-  <script src="main.js"></script>
+    <!-- PROJECTS -->
+    <div id="tab-projects" class="tab">
+      <div class="tab-header">
+        <h1 class="tab-title">monthly projects</h1>
+        <p class="tab-sub">one cross-subject project per month — four saturdays each</p>
+      </div>
+      <div id="projects-content" class="projects-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SETTINGS DRAWER -->
+<div id="settings-scrim" class="scrim" style="display:none"></div>
+<div id="settings-drawer" class="settings-drawer" style="display:none">
+  <div class="settings-head">
+    <span class="settings-title">settings</span>
+    <button class="icon-btn" id="settings-close">✕</button>
+  </div>
+  <div class="settings-scroll">
+
+    <div class="settings-section">
+      <label class="settings-label">name</label>
+      <div class="settings-row">
+        <input type="text" id="s-name" class="ob-input"/>
+        <button class="btn-accent btn-sm" id="s-save-name">save</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">groq api key</label>
+      <div class="settings-row">
+        <input type="password" id="s-key" class="ob-input" placeholder="gsk_…"/>
+        <button class="btn-accent btn-sm" id="s-save-key">save</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">daily study time</label>
+      <select id="s-hours" class="ob-input">
+        <option>30 minutes</option>
+        <option>45 minutes</option>
+        <option selected>1 hour</option>
+        <option>1.5 hours</option>
+        <option>2 hours</option>
+      </select>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">focus subjects</label>
+      <input type="text" id="s-focus" class="ob-input" placeholder="e.g. English, Maths, Chemistry"/>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">coaching outside school</label>
+      <input type="text" id="s-coaching" class="ob-input" placeholder="e.g. English tutor Tuesdays"/>
+      <button class="btn-accent btn-sm mt-8" id="s-save-prefs">save preferences</button>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">re-upload report card</label>
+      <label class="ob-upload compact">
+        <input type="file" id="s-report" accept=".pdf,.jpg,.jpeg,.png" class="ob-file"/>
+        <div class="ob-upload-inner"><span id="s-report-name">tap to upload</span></div>
+      </label>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">re-upload syllabus</label>
+      <label class="ob-upload compact">
+        <input type="file" id="s-syllabus" accept=".pdf,.jpg,.jpeg,.png" class="ob-file"/>
+        <div class="ob-upload-inner"><span id="s-syllabus-name">tap to upload</span></div>
+      </label>
+      <button class="btn-accent btn-sm mt-8" id="s-regen">regenerate plan with new docs</button>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">theme</label>
+      <div class="theme-grid">
+        <button class="theme-btn active" data-theme="light"><span class="theme-dot" style="background:#F5F2EC;border:1px solid #ccc"></span>light</button>
+        <button class="theme-btn" data-theme="dark"><span class="theme-dot" style="background:#111110"></span>dark</button>
+        <button class="theme-btn" data-theme="forest"><span class="theme-dot" style="background:#0D1F12"></span>forest</button>
+        <button class="theme-btn" data-theme="ocean"><span class="theme-dot" style="background:#0D1F3C"></span>ocean</button>
+        <button class="theme-btn" data-theme="midnight"><span class="theme-dot" style="background:#0A0A12"></span>midnight</button>
+        <button class="theme-btn" data-theme="warm"><span class="theme-dot" style="background:#FFF8F0;border:1px solid #ccc"></span>warm</button>
+        <button class="theme-btn" data-theme="rose"><span class="theme-dot" style="background:#1A0D12"></span>rose</button>
+        <button class="theme-btn" data-theme="slate"><span class="theme-dot" style="background:#0F1117"></span>slate</button>
+      </div>
+    </div>
+
+    <div class="settings-section settings-danger">
+      <label class="settings-label">danger zone</label>
+      <button class="btn-danger btn-sm" id="s-reset">reset everything</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- REWARD MODAL -->
+<div id="reward-scrim" class="scrim" style="display:none">
+  <div class="reward-modal">
+    <div class="reward-emoji" id="reward-emoji">🎉</div>
+    <h2 class="reward-h">day complete</h2>
+    <p class="reward-sub" id="reward-sub"></p>
+    <div class="reward-ai" id="reward-ai"></div>
+    <button class="btn-accent" id="reward-close">close</button>
+  </div>
+</div>
+
+<script src="main.js"></script>
 </body>
 </html>
