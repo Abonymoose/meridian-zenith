@@ -82,48 +82,40 @@ async function generatePlan(prefs, reportText, syllabusText, existingPlanText) {
   if (reportText) context += `REPORT CARD DATA:\n${reportText}\n\n`;
   if (syllabusText) context += `SYLLABUS:\n${syllabusText}\n\n`;
 
-  const prompt = `You are an expert Cambridge educational coach. Build a personalised self-study plan.
+  const prompt = `You are an expert Cambridge educational coach. Build a fully personalised self-study plan.
 
 STUDENT: ${name}, ${grade || 'Grade 8'}, Cambridge curriculum
-DAILY STUDY TIME: ${hours || '1 hour'} — fit ALL tasks per day within this
-STUDY DAYS: ONLY ${days.join(', ')} (day numbers ${dayNums.join(',')})
-${focus?.length ? `PRIORITY SUBJECTS (most time/tasks): ${focus.join(', ')}` : ''}
+DAILY STUDY TIME: ${hours || '1 hour'} total per day — all tasks per day MUST fit within this
+STUDY DAYS: ONLY these days: ${days.join(', ')} (day numbers: ${dayNums.join(',')})
+${focus?.length ? `PRIORITY SUBJECTS (give these more tasks/time): ${focus.join(', ')}` : 'Balance across all subjects the student studies'}
 ${style ? `LEARNING STYLE: ${style}` : ''}
-${coaching ? `ALREADY COACHED IN (do NOT include): ${coaching}` : ''}
+${coaching ? `SKIP these (already coached): ${coaching}` : ''}
 
-${context || 'No documents provided — use standard Cambridge curriculum for this grade.'}
+${context || `No documents uploaded. Use standard Cambridge ${grade||'Grade 8'} curriculum subjects and topics.`}
 
-STRICT RULES:
-1. ONLY include days: ${days.join(', ')} — day numbers ${dayNums.join(',')} — nothing else
-2. Each day's total task mins MUST fit within ${hours || '1 hour'}
-3. If report card provided: prioritise weak subjects (lower scores), reference actual teacher feedback
-4. If syllabus provided: every task must reference a REAL topic from the syllabus — no generic tasks
-5. If existing schedule provided: restructure the student's actual schedule into the app format
-6. Skip subjects already covered by coaching
-7. generateContent:true only for tasks needing fresh AI content each session (reading, problems, exercises)
-8. Every task must have a "detail" field with specific HOW-TO advice
-9. Use soft pastel colors (#FDE8D8, #E0F0FF, #DCF4E8, #E8E0F8, #FDE8EE, #E0F4EC, #F0E8D4, #E8F4DC, #E0EEF8)
+CRITICAL RULES — follow exactly:
+1. SUBJECTS: Extract subject names ONLY from the documents above. Do NOT use generic/assumed subjects. If no documents, use standard Cambridge ${grade||'Grade 8'} subjects appropriate for this grade.
+2. TOPICS: Every single task must reference a REAL topic from the syllabus or existing schedule. No generic tasks like "study subject X" — be specific to actual content.
+3. DAYS: ONLY generate day numbers ${dayNums.join(',')} — no others.
+4. TIME: Total task mins per day must fit within ${hours||'1 hour'}. Task mins must be integers (5,10,15,20,25,30).
+5. PROJECTS: Generate 4 unique projects tailored to THIS student's actual subjects — not generic projects. Each project should combine 2-3 of their real subjects in a creative way.
+6. CS ROADMAP: Generate a CS roadmap appropriate for ${grade||'Grade 8'}. For Grade 5-6: focus on Scratch, basic Python, algorithms as puzzles. For Grade 7-8: binary, sorting, data structures, recursion.
+7. No coaching overlap. generateContent:true only for reading/problem/exercise tasks.
+8. Every task needs a "detail" field with specific, actionable advice.
+9. Colors: soft pastels — #FDE8D8, #E0F0FF, #DCF4E8, #E8E0F8, #FDE8EE, #E0F4EC, #F0E8D4, #E8F4DC, #E0EEF8, #FEF8EC
 
-Respond ONLY with valid JSON (no markdown, no explanation):
+Respond ONLY with valid JSON:
 {
-  "summary": "2-3 sentences: strengths, weaknesses, key focus based on their actual data",
+  "summary": "2-3 sentences: student's strengths, weaknesses, key focus — based on their actual uploaded data",
   "days": {
-    "${dayNums[0]||1}": {
-      "name": "${days[0]||'Monday'}",
-      "subjects": [{
-        "name": "Subject",
-        "color": "#FDE8D8",
-        "duration": "25 min",
-        "tasks": [{ "text": "specific task referencing real syllabus topic", "mins": 15, "detail": "how to do this well", "generateContent": false }]
-      }]
-    }
+    "${dayNums[0]||1}": { "name": "${days[0]||'Monday'}", "subjects": [{ "name": "Real Subject Name from docs", "color": "#FDE8D8", "duration": "X min", "tasks": [{ "text": "specific task with real topic", "mins": 15, "detail": "actionable how-to", "generateContent": false }] }] }
   },
-  "csRoadmap": [{ "month": "Month", "theme": "theme desc", "weeks": [{ "range": "Wk 1-2", "title": "title", "description": "what to do and why" }], "resources": ["resource 1"] }],
-  "projects": [{ "month": "Month", "title": "Project title", "subjects": ["S1","S2"], "description": "what it involves", "steps": ["step1","step2","step3","step4"], "deliverable": "what they produce" }]
+  "csRoadmap": [{ "month": "Month name", "theme": "theme", "weeks": [{ "range": "Wk 1-2", "title": "topic", "description": "what to learn and do" }], "resources": ["resource"] }],
+  "projects": [{ "month": "Month name", "title": "project title", "subjects": ["Real Subject 1","Real Subject 2"], "description": "what it involves and why it matters", "steps": ["concrete step 1","concrete step 2","concrete step 3","concrete step 4"], "deliverable": "specific thing they produce" }]
 }
 
-Include ALL ${days.length} study day(s): ${days.map((d,i)=>`${dayNums[i]}=${d}`).join(', ')}
-Include exactly 4 months in csRoadmap, 4 projects.`;
+Generate ALL ${days.length} day(s): ${days.map((d,i)=>`${dayNums[i]}=${d}`).join(', ')}
+4 months in csRoadmap. 4 projects using this student's REAL subjects.`;
 
   const reply = await groq([
     { role: 'system', content: 'Expert educational planner. Return valid JSON only. No markdown. No explanation.' },
@@ -138,103 +130,150 @@ Include exactly 4 months in csRoadmap, 4 projects.`;
 }
 
 function defaultPlan(prefs) {
-  const { name } = prefs;
-  return {
-    summary: `Welcome, ${name}! Your personalised plan covers core Cambridge subjects with focused daily self-study. Tasks are built around common challenge points — analytical writing, science depth, and mathematical reasoning.`,
-    days: {
-      1: { name:'Monday', subjects:[
-        { name:'English', color:'#FDE8D8', duration:'25 min', tasks:[
-          { text:'Read one literary text not in your curriculum', mins:15, detail:'Choose a short story, essay, or poem 1-2 levels above class. Read slowly and annotate. Ask: what technique is the writer using?', generateContent:true },
-          { text:'Write 5-8 lines of analytical response', mins:10, detail:"What is this text really about beneath the surface? Don't summarise — analyse the craft." }
-        ]},
-        { name:'History', color:'#F0E8D4', duration:'35 min', tasks:[
-          { text:'Find one primary source on this week\'s topic', mins:15, detail:'Wikisource has free primary documents. Read slowly. Ask: who wrote this, when, and why does their position matter?' },
-          { text:'Write OPCVL analysis', mins:10, detail:'Origin, Purpose, Content, Value, Limitation. What does this source tell us? Why might it be limited?' },
-          { text:'Connect source to the bigger argument', mins:10, detail:'How does this source fit the main historical narrative? Be specific — cite it.' }
-        ]}
-      ]},
-      2: { name:'Tuesday', subjects:[
-        { name:'Mathematics', color:'#E0F0FF', duration:'35 min', tasks:[
-          { text:'Attempt 2-3 harder problems without examples', mins:15, detail:'Struggle productively — 5 minutes of genuine effort before any hint. The discomfort is the mechanism.', generateContent:true },
-          { text:'Prove why one rule from this week works', mins:15, detail:"Don't accept rules without understanding. Example: why does a negative index give a reciprocal? Prove from the pattern." },
-          { text:'Error journal: categorise any mistakes', mins:5, detail:'Categories: conceptual misunderstanding / careless arithmetic / question misread. Patterns across errors are more useful than individual corrections.' }
-        ]},
-        { name:'Physics', color:'#E8E0F8', duration:'25 min', tasks:[
-          { text:'Read each question TWICE before touching a pen', detail:'Most careless errors come from misreading, not from not knowing. Two reads costs 10 seconds.' },
-          { text:'Solve today\'s problems', mins:25, detail:'Explain the physical principle before calculating. Estimate the answer before working it out.', generateContent:true }
-        ]}
-      ]},
-      3: { name:'Wednesday', subjects:[
-        { name:'CS', color:'#DCF4E8', duration:'35 min', tasks:[
-          { text:'3-sentence summary from memory, no notes', mins:5, detail:"Close everything. Write 3 sentences from memory. If you can't, go back before moving forward." },
-          { text:'Work through this week\'s CS fundamentals topic', mins:20, detail:'Trace the algorithm on paper first. Then code. Never copy — type from understanding.', generateContent:true },
-          { text:'Trace algorithm by hand on 5-6 elements', mins:10, detail:'No code. Paper only. Understanding logic before writing code is what makes debugging easy.' }
-        ]},
-        { name:'Chemistry', color:'#FDE8EE', duration:'25 min', tasks:[
-          { text:'Work through today\'s Chemistry topic', mins:15, detail:'Read every question twice. Underline the command word. Answer only what it asks.', generateContent:true },
-          { text:'Attempt one past paper question', mins:10, detail:'describe=what happens, explain=why, compare=similarities AND differences.' }
-        ]}
-      ]},
-      4: { name:'Thursday', subjects:[
-        { name:'Biology', color:'#E0F4EC', duration:'30 min', tasks:[
-          { text:'Go one level deeper than the textbook', mins:15, detail:'A-level content is accessible at Grade 8 if explained well. For photosynthesis: what actually happens in the light-dependent stage?', generateContent:true },
-          { text:'Draw and label full diagram from memory', mins:10, detail:'No looking. Draw from scratch. Mark every gap in red. Gaps = spend 5 min on precisely those parts.' },
-          { text:'Find one real-world connection', mins:5, detail:'Science Daily or BBC Science. One article connected to this week\'s topic.' }
-        ]},
-        { name:'Geography', color:'#E8F4DC', duration:'30 min', tasks:[
-          { text:'Find one current news story on this week\'s topic', mins:10, detail:'Write 3-4 sentences arguing a position — not just describing. Use geographical terminology.' },
-          { text:'Draw key map features from memory', mins:10, detail:'No atlas. Outline + physical features relevant to this week. Check accuracy after.' },
-          { text:'Connection journal: Biology ↔ Geography', mins:10, detail:'Push beyond the obvious. These cross-subject connections appear in top-grade responses.' }
-        ]}
-      ]},
-      5: { name:'Friday', subjects:[
-        { name:'French', color:'#E0EEF8', duration:'25 min', tasks:[
-          { text:'Today\'s listening and immersion', mins:10, detail:'TV5Monde, Coffee Break French, or InnerFrench. Authentic exposure is irreplaceable.', generateContent:true },
-          { text:'Write 6-8 original sentences using this week\'s tense', mins:10, detail:'Original sentences from your own thinking. One sophisticated sentence beats three simple ones.' },
-          { text:'Go deep on one grammar rule — understand the logic', mins:5, detail:'The logic behind grammar rules is more memorable than rote learning. Why does it work this way?' }
-        ]},
-        { name:'CS', color:'#DCF4E8', duration:'35 min', tasks:[
-          { text:'Build and time this week\'s CS implementation', mins:20, detail:'Implement, then time on arrays of 10/100/1000. Does timing match Big-O theory?', generateContent:true },
-          { text:'Ask "why does this work?" one level deeper', mins:10, detail:"For binary search: why must the array be sorted? Understanding preconditions separates programmers." },
-          { text:'Set 3 specific measurable goals for next week', mins:5, detail:'Not "do better" but "implement selection sort and time it on 3 array sizes."' }
-        ]}
-      ]},
-      6: { name:'Saturday', subjects:[
-        { name:'Project', color:'#EDF5E9', duration:'60 min', tasks:[
-          { text:"Re-read project brief — what is today's specific deliverable?", mins:5, detail:'Answer in one sentence: "By the end of today I will have…"' },
-          { text:'First 25-min block: substance only, no polishing', mins:25, detail:'Resist making it look good before it is good.' },
-          { text:'5-min break', mins:5, detail:'Actually stop. The break is part of the method.' },
-          { text:'Second 25-min block: continue building', mins:25, detail:'Push through to completion of today\'s deliverable.' },
-          { text:'Write 2 sentences: what you did + next Saturday\'s step', mins:5, detail:'Prevents starting from zero each week. Be specific.' }
-        ]}
-      ]}
-    },
-    csRoadmap: [
-      { month:'June', theme:'how computers actually work', weeks:[
-        { range:'Wk 1-2', title:'Binary and data representation', description:'Number systems from first principles. How integers, text (ASCII), and colours (RGB) are stored as binary. Convert manually: decimal ↔ binary ↔ hex. Implement a converter in Python without built-in functions.' },
-        { range:'Wk 3-4', title:'Logic gates and Boolean algebra', description:'AND, OR, NOT, NAND, NOR, XOR — understood as physical transistors, not just symbols. Build truth tables. Simplify using De Morgan\'s laws. Show how a half-adder is built from logic gates.' }
-      ], resources:['CS50 Week 0 — Harvard (free)','Ben Eater on YouTube — 8-bit computer series','nand2tetris.org'] },
-      { month:'July', theme:'algorithms: solving problems efficiently', weeks:[
-        { range:'Wk 5-6', title:'Sorting algorithms', description:'Implement bubble sort, selection sort, and insertion sort from scratch — no built-in sort. For each: trace through 5 elements on paper first, then code, then count comparisons and swaps. Why is insertion sort better on nearly-sorted data?' },
-        { range:'Wk 7-8', title:'Searching and Big-O notation', description:'Linear search vs binary search. Implement both, time them on 100/1000/10000 elements. Plot results. Big-O intuitively: O(n) vs O(log n). Prove why binary search requires a sorted array.' }
-      ], resources:['"Grokking Algorithms" by Aditya Bhargava — Ch 1-4','CS50 Week 3 — Algorithms','Visualgo.net — algorithm animations'] },
-      { month:'August', theme:'data structures: organising information', weeks:[
-        { range:'Wk 9-10', title:'Arrays, linked lists, stacks, queues', description:'Why is array random access O(1) but insertion O(n)? Implement a stack (LIFO) and queue (FIFO) from scratch. Use your stack to check for balanced parentheses in an expression.' },
-        { range:'Wk 11-12', title:'Hash tables and trees', description:'How does Python\'s dict achieve O(1) lookup? What is a hash function? What is a collision? Binary search trees: implement insert and search. Where do trees appear in real systems?' }
-      ], resources:['"Grokking Algorithms" Ch 5 and 7','CS50 Week 5 — Data Structures','pythontutor.com — visualise memory'] },
-      { month:'September', theme:'programming depth: recursion and dynamic programming', weeks:[
-        { range:'Wk 13-14', title:'Recursion and the call stack', description:'What actually happens in memory when a function calls itself? Implement factorial and Fibonacci recursively. Use Python Tutor to watch the call stack. When is recursion elegant, when is it dangerous?' },
-        { range:'Wk 15-16', title:'Dynamic programming introduction', description:'Memoization: add caching to recursive Fibonacci. Measure performance for n=40 vs naive. Tabulation vs memoization. Solve 3-5 Project Euler problems combining CS and Maths.' }
-      ], resources:['CS50 Week 4 — Memory','"Grokking Algorithms" Ch 9 — DP','projecteuler.net','LeetCode — Easy problems'] }
+  const { name, grade } = prefs;
+  const g = parseInt((grade||'8').replace(/\D/g,'')) || 8;
+
+  // Grade-appropriate subject sets — these are fallbacks only when no docs uploaded
+  const subjectSets = {
+    5: [
+      { name:'English', color:'#FDE8D8', days:[1,3,5] },
+      { name:'Mathematics', color:'#E0F0FF', days:[2,4] },
+      { name:'Science', color:'#E0F4EC', days:[1,4] },
+      { name:'Social Studies', color:'#F0E8D4', days:[2,5] },
+      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
     ],
-    projects: [
-      { month:'June', title:'Binary calculator', subjects:['CS','Mathematics'], description:'Build a binary calculator in Python using only bit manipulation — no arithmetic operators. Implement addition using AND, OR, XOR, and left shift. Forces you to understand how a CPU\'s ALU actually works.', steps:['Understand binary addition by hand. Research half-adder and full adder circuits.','Implement a half-adder in Python using only bitwise operators. Test all 4 input combinations.','Build a full-adder. Chain 8 full-adders to make an 8-bit adder. Test thoroughly.','Implement binary subtraction using two\'s complement. Write a 300-word explanation of why computers use it.'], deliverable:'Working Python implementation + 300-word technical explanation' },
-      { month:'July', title:'The physics of music', subjects:['Physics','Mathematics','English'], description:'Investigate the science of a musical instrument of your choice — how strings or air columns produce specific notes, what determines pitch and loudness. Connect Physics, Maths, and technical writing.', steps:['Research: how does a vibrating string produce a standing wave? What are harmonics and overtones?','Mathematics: using f × 2^(n/12), calculate every note in one octave starting from A4=440Hz. Graph it.','Comparison: compare sound production in two different instruments. What physical differences explain different timbres?','Write a 400-word scientific report with labelled diagram and frequency graph.'], deliverable:'400-word scientific report + frequency graph' },
-      { month:'August', title:'Home lab: photosynthesis', subjects:['Biology','Chemistry','Mathematics'], description:'Design and conduct a real experiment testing how light intensity affects photosynthesis rate. Use the floating leaf disk method with spinach and sodium bicarbonate — inexpensive and genuinely works at home.', steps:['Design: write hypothesis, identify variables, write a method specific enough to replicate.','Conduct: run at 3-4 light distances. At least 3 repeated trials per condition. Record data properly.','Analyse: calculate averages, create a line graph, identify trends and anomalies. Does data support hypothesis?','Write full lab report: hypothesis, method, results (table + graph), conclusion, evaluation.'], deliverable:'Full scientific lab report' },
-      { month:'September', title:'A voice from history', subjects:['English','History'], description:'Write a 500-word realistic fiction piece from the perspective of a young person your age during a major historical event from your syllabus. Historically accurate, using at least 3 literary techniques.', steps:['Research: choose one specific event. Research daily life for ordinary people, not leaders.','Outline: character, setting, conflict (internal/external), resolution.','First draft: write the complete story beginning to end without stopping to perfect.','Revise + 150-word author\'s note: which historical facts did you include? Which techniques did you use deliberately?'], deliverable:"500-word story + 150-word author's note" }
-    ]
+    6: [
+      { name:'English', color:'#FDE8D8', days:[1,3] },
+      { name:'Mathematics', color:'#E0F0FF', days:[2,4] },
+      { name:'Science', color:'#E0F4EC', days:[1,4] },
+      { name:'History', color:'#F0E8D4', days:[2,5] },
+      { name:'Geography', color:'#E8F4DC', days:[3] },
+      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
+    ],
+    7: [
+      { name:'English', color:'#FDE8D8', days:[1] },
+      { name:'Mathematics', color:'#E0F0FF', days:[2] },
+      { name:'Physics', color:'#E8E0F8', days:[2,4] },
+      { name:'Chemistry', color:'#FDE8EE', days:[3] },
+      { name:'Biology', color:'#E0F4EC', days:[4] },
+      { name:'History', color:'#F0E8D4', days:[1] },
+      { name:'Geography', color:'#E8F4DC', days:[4] },
+      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
+      { name:'French', color:'#E0EEF8', days:[5] },
+    ],
+    8: [
+      { name:'English', color:'#FDE8D8', days:[1] },
+      { name:'Mathematics', color:'#E0F0FF', days:[2] },
+      { name:'Physics', color:'#E8E0F8', days:[2] },
+      { name:'Chemistry', color:'#FDE8EE', days:[3] },
+      { name:'Biology', color:'#E0F4EC', days:[4] },
+      { name:'History', color:'#F0E8D4', days:[1] },
+      { name:'Geography', color:'#E8F4DC', days:[4] },
+      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
+      { name:'French', color:'#E0EEF8', days:[5] },
+    ],
+  };
+
+  const subjects = subjectSets[Math.min(g, 8)] || subjectSets[8];
+  const studyDays = prefs.days?.length ? prefs.days : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const DAY_MAP = { Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
+  const dayNums = studyDays.map(d => DAY_MAP[d]).filter(Boolean);
+
+  // Build days dynamically
+  const days = {};
+  const DAY_NAMES = { 1:'Monday', 2:'Tuesday', 3:'Wednesday', 4:'Thursday', 5:'Friday', 6:'Saturday' };
+
+  dayNums.forEach(dow => {
+    const daySubjects = dow === 6
+      ? [{ name:'Project', color:'#EDF5E9', duration:'60 min', tasks:[
+          { text:"Re-read project brief — what is today's deliverable?", mins:5, detail:'Answer in one sentence: "By the end of today I will have…"' },
+          { text:'First 25-min work block: substance only', mins:25, detail:'Resist polishing before it is good.' },
+          { text:'5-min break', mins:5, detail:'Actually stop. The break is part of the method.' },
+          { text:'Second 25-min work block', mins:25, detail:'Push through to completion.' },
+          { text:'Write 2 sentences: what you did + next step', mins:5, detail:'Prevents starting from zero next week.' },
+        ]}]
+      : subjects.filter(s => s.days.includes(dow)).map(s => ({
+          name: s.name,
+          color: s.color,
+          duration: '30 min',
+          tasks: [
+            { text: `${s.name}: work through this week's topic`, mins: 20, detail: `Read actively, take brief notes, connect to what you already know. Pause when something is unclear and work it out before continuing.`, generateContent: true },
+            { text: `${s.name}: attempt practice problems or exercises`, mins: 10, detail: 'Apply what you just studied. Check your work and understand any mistakes.' },
+          ]
+        }));
+
+    if (daySubjects.length > 0) {
+      days[dow] = { name: DAY_NAMES[dow], subjects: daySubjects };
+    }
+  });
+
+  // Grade-appropriate CS roadmap
+  const csRoadmaps = {
+    5: [
+      { month:'Month 1', theme:'introduction to computing', weeks:[
+        { range:'Wk 1-2', title:'What is a computer?', description:'How computers store and process information. Binary basics: why computers use 1s and 0s. Simple exercises converting small numbers.' },
+        { range:'Wk 3-4', title:'Algorithms and sequences', description:'What is an algorithm? Writing step-by-step instructions for everyday tasks. Scratch: build simple animations following algorithmic thinking.' }
+      ], resources:['Code.org — free courses','Scratch (scratch.mit.edu)','CS Unplugged — csunplugged.org'] },
+      { month:'Month 2', theme:'programming basics', weeks:[
+        { range:'Wk 5-6', title:'Variables and loops', description:'What is a variable? Loops: repeat instructions instead of writing them out. Build a project using variables and loops in Scratch or Python.' },
+        { range:'Wk 7-8', title:'Conditions and events', description:'If-else decisions. Events and triggers. Build a simple interactive game.' }
+      ], resources:['Scratch','Python Turtle graphics','Khan Academy — Intro to JS'] },
+      { month:'Month 3', theme:'problem solving', weeks:[
+        { range:'Wk 9-10', title:'Decomposition', description:'Breaking big problems into smaller ones. Plan a project by decomposing it into parts, then build each part.' },
+        { range:'Wk 11-12', title:'Debugging and testing', description:'What is a bug? Systematic debugging: read the error, identify the line, fix and test. Build something and deliberately break it.' }
+      ], resources:['repl.it — browser IDE','Python for Kids (book)'] },
+      { month:'Month 4', theme:'data and patterns', weeks:[
+        { range:'Wk 13-14', title:'Lists and collections', description:'Storing multiple items. Loops over lists. Build a quiz that stores questions and answers in lists.' },
+        { range:'Wk 15-16', title:'Mini project', description:'Design and build a small Python or Scratch project that uses everything learned: variables, loops, conditions, lists.' }
+      ], resources:['Project Euler first 5 problems','freeCodeCamp'] },
+    ],
+  };
+
+  const defaultCS = [
+    { month:'June', theme:'how computers actually work', weeks:[
+      { range:'Wk 1-2', title:'Binary and data representation', description:'Number systems from first principles. Convert decimal ↔ binary ↔ hex manually. Implement a converter in Python without built-in functions.' },
+      { range:'Wk 3-4', title:'Logic gates and Boolean algebra', description:'AND, OR, NOT understood as transistors. Build truth tables. De Morgan's laws. Show how a half-adder is built from logic gates.' }
+    ], resources:['CS50 Week 0 — Harvard (free)','Ben Eater on YouTube','nand2tetris.org'] },
+    { month:'July', theme:'algorithms: solving problems efficiently', weeks:[
+      { range:'Wk 5-6', title:'Sorting algorithms', description:'Implement bubble, selection, insertion sort from scratch. Trace on paper first. Count comparisons and swaps.' },
+      { range:'Wk 7-8', title:'Searching and Big-O', description:'Linear vs binary search. Time both on 100/1000/10000 elements. Big-O: O(n) vs O(log n).' }
+    ], resources:['"Grokking Algorithms" Ch 1-4','Visualgo.net'] },
+    { month:'August', theme:'data structures', weeks:[
+      { range:'Wk 9-10', title:'Arrays, stacks, queues', description:'Why is array access O(1) but insertion O(n)? Implement a stack and queue from scratch.' },
+      { range:'Wk 11-12', title:'Hash tables and trees', description:'How does Python dict achieve O(1) lookup? Implement a simple BST.' }
+    ], resources:['"Grokking Algorithms" Ch 5+7','pythontutor.com'] },
+    { month:'September', theme:'recursion and dynamic programming', weeks:[
+      { range:'Wk 13-14', title:'Recursion and the call stack', description:'What happens in memory when a function calls itself? Implement factorial and Fibonacci recursively.' },
+      { range:'Wk 15-16', title:'Dynamic programming', description:'Memoization: add caching to Fibonacci. Measure performance for n=40. Solve Project Euler problems.' }
+    ], resources:['CS50 Week 4','"Grokking Algorithms" Ch 9','projecteuler.net'] },
+  ];
+
+  // Grade-appropriate projects
+  const projectSets = {
+    5: [
+      { month:'Month 1', title:'My digital story', subjects:['English','CS'], description:'Write a short illustrated digital story using Google Slides or Canva. Each slide is a scene — write the text, then illustrate it with drawings or images.', steps:['Plan your story: character, setting, problem, solution (4 slides minimum).','Write the text for each slide.','Add illustrations — draw by hand and photograph, or use digital tools.','Share with one family member and ask for feedback. Make one improvement.'], deliverable:'Illustrated digital story (4+ slides)' },
+      { month:'Month 2', title:'Nature survey', subjects:['Science','Mathematics'], description:'Survey living things in your garden, school, or local park. Count, classify, and present your data.', steps:['Choose a site and decide what to count (plants, insects, birds, etc.).','Visit 3 times and record counts each time.','Calculate averages. Create a bar chart of your results.','Write 3 sentences: what did you find, what surprised you, what would you do differently?'], deliverable:'Data table + bar chart + written summary' },
+      { month:'Month 3', title:'How does it work?', subjects:['Science','English'], description:'Choose one everyday machine or technology (a bicycle, a microwave, a speaker). Research how it works and explain it clearly.', steps:['Research: how does it work? Find two reliable sources.','Draw a labelled diagram.','Write a 200-word explanation in your own words.','Read it to someone and check: can they understand it from your explanation alone?'], deliverable:'Labelled diagram + 200-word explanation' },
+      { month:'Month 4', title:'Mini coding project', subjects:['CS'], description:'Build a simple interactive program in Python or Scratch that solves a small problem or entertains someone.', steps:['Decide what your program will do. Write a one-sentence description.','Build version 1 — basic functionality only.','Test it with someone. Write down 2 things to improve.','Build version 2 with improvements. Show it to your family.'], deliverable:'Working program + brief description of what it does and how' },
+    ],
+  };
+
+  const defaultProjects = [
+    { month:'June', title:'Cross-subject investigation', subjects:['Science','Mathematics'], description:'Choose a question that connects science and mathematics. Design a simple experiment, collect data, and analyse the results.', steps:['Choose a question and write a hypothesis.','Design a simple experiment. Run it at least 3 times.','Record data in a table. Calculate averages. Create a graph.','Write a conclusion: does the data support your hypothesis?'], deliverable:'Lab report with data table, graph, and conclusion' },
+    { month:'July', title:'Deep dive research project', subjects:['English','History/Humanities'], description:'Choose a topic from your current curriculum. Research it deeply, go beyond the textbook, and write up your findings.', steps:['Choose a specific angle on a topic you're currently studying.','Find at least 2 sources beyond your textbook. Take notes.','Write a 400-word report with an introduction, body, and conclusion.','Reflect: what did you learn that surprised you?'], deliverable:'400-word research report' },
+    { month:'August', title:'Creative coding project', subjects:['CS','Mathematics'], description:'Build a program that solves a real problem or explores a mathematical concept you've been studying.', steps:['Define the problem your program will solve.','Plan the logic on paper before coding.','Implement and test. Fix at least one bug.','Document: write 3 sentences explaining how it works and what you'd improve.'], deliverable:'Working program + brief documentation' },
+    { month:'September', title:'Personal creative project', subjects:['English'], description:'Write a substantial piece of creative writing connected to a historical or scientific topic you've studied this term.', steps:['Choose a topic from your learning this term and a creative angle.','Plan: characters, setting, narrative arc.','Write a complete first draft without stopping to perfect.','Revise once. Add an author's note explaining connections to real content.'], deliverable:"Creative writing piece + author's note" },
+  ];
+
+  return {
+    summary: `Welcome, ${name}! Your plan is built for ${grade||'middle school'} Cambridge curriculum. ${prefs.focus?.length ? `Priority subjects: ${prefs.focus.join(', ')}.` : 'All core subjects are covered.'} ${prefs.coaching ? `Coaching already in place for: ${prefs.coaching} — those are excluded.` : ''}`,
+    days,
+    csRoadmap: (g <= 5) ? csRoadmaps[5] : defaultCS,
+    projects: (g <= 5) ? projectSets[5] : defaultProjects,
   };
 }
+
+
 
 /* ── Onboarding ────────────────────────────────────────── */
 let obData = { grade:'Grade 8', hours:'1 hour', days:[], focus:[], style:'', coaching:'' };
@@ -542,7 +581,7 @@ function renderStreak() {
 
 /* ── Timer ─────────────────────────────────────────────── */
 let tInterval=null, tTotal=15*60, tLeft=15*60, tRunning=false;
-const CIRC = 2*Math.PI*52;
+const CIRC = 2*Math.PI*70; // r=70
 
 function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 

@@ -277,12 +277,12 @@ body{background:var(--bg);color:var(--tx)}
 .preset.active{background:var(--a);border-color:var(--a);color:#fff}
 .custom-min-input{display:none;width:100%;border:1px solid var(--bd);border-radius:8px;padding:0.4rem 0.75rem;font-size:0.82rem;background:var(--panel2);color:var(--tx)}
 .custom-min-input:focus{border-color:var(--a)}
-.ring-wrap{position:relative;width:136px;height:136px;margin:0.25rem auto}
+.ring-wrap{position:relative;width:180px;height:180px;margin:0.5rem auto}
 .ring-svg{width:100%;height:100%;transform:rotate(-90deg)}
-.ring-track{fill:none;stroke:var(--bd);stroke-width:5}
-.ring-prog{fill:none;stroke:var(--a);stroke-width:5;stroke-linecap:round;stroke-dasharray:327;stroke-dashoffset:0;transition:stroke-dashoffset 1s linear,stroke 0.3s}
+.ring-track{fill:none;stroke:var(--bd);stroke-width:6}
+.ring-prog{fill:none;stroke:var(--a);stroke-width:6;stroke-linecap:round;stroke-dasharray:440;stroke-dashoffset:0;transition:stroke-dashoffset 1s linear,stroke 0.3s}
 .ring-prog.done{stroke:#C45C1A}
-.ring-time{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'JetBrains Mono',monospace;font-size:1.4rem;font-weight:400;color:var(--tx);letter-spacing:0.01em}
+.ring-time{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'JetBrains Mono',monospace;font-size:1.9rem;font-weight:400;color:var(--tx);letter-spacing:0.02em}
 .timer-label-input{width:100%;border:1px solid var(--bd);border-radius:8px;padding:0.45rem 0.75rem;font-size:0.8rem;background:var(--panel2);color:var(--tx)}
 .timer-label-input:focus{border-color:var(--a)}
 .timer-label-input::placeholder{color:var(--tx-3)}
