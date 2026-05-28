@@ -186,7 +186,7 @@ function defaultPlan(prefs) {
   dayNums.forEach(dow => {
     const daySubjects = dow === 6
       ? [{ name:'Project', color:'#EDF5E9', duration:'60 min', tasks:[
-          { text:"Re-read project brief — what is today's deliverable?", mins:5, detail:'Answer in one sentence: "By the end of today I will have…"' },
+          { text:"Re-read project brief — what is today\'\2 deliverable?", mins:5, detail:'Answer in one sentence: "By the end of today I will have…"' },
           { text:'First 25-min work block: substance only', mins:25, detail:'Resist polishing before it is good.' },
           { text:'5-min break', mins:5, detail:'Actually stop. The break is part of the method.' },
           { text:'Second 25-min work block', mins:25, detail:'Push through to completion.' },
@@ -232,7 +232,7 @@ function defaultPlan(prefs) {
   const defaultCS = [
     { month:'June', theme:'how computers actually work', weeks:[
       { range:'Wk 1-2', title:'Binary and data representation', description:'Number systems from first principles. Convert decimal ↔ binary ↔ hex manually. Implement a converter in Python without built-in functions.' },
-      { range:'Wk 3-4', title:'Logic gates and Boolean algebra', description:'AND, OR, NOT understood as transistors. Build truth tables. De Morgan's laws. Show how a half-adder is built from logic gates.' }
+      { range:'Wk 3-4', title:'Logic gates and Boolean algebra', description:'AND, OR, NOT understood as transistors. Build truth tables. De Morgan laws. Show how a half-adder is built from logic gates.' }
     ], resources:['CS50 Week 0 — Harvard (free)','Ben Eater on YouTube','nand2tetris.org'] },
     { month:'July', theme:'algorithms: solving problems efficiently', weeks:[
       { range:'Wk 5-6', title:'Sorting algorithms', description:'Implement bubble, selection, insertion sort from scratch. Trace on paper first. Count comparisons and swaps.' },
@@ -260,9 +260,9 @@ function defaultPlan(prefs) {
 
   const defaultProjects = [
     { month:'June', title:'Cross-subject investigation', subjects:['Science','Mathematics'], description:'Choose a question that connects science and mathematics. Design a simple experiment, collect data, and analyse the results.', steps:['Choose a question and write a hypothesis.','Design a simple experiment. Run it at least 3 times.','Record data in a table. Calculate averages. Create a graph.','Write a conclusion: does the data support your hypothesis?'], deliverable:'Lab report with data table, graph, and conclusion' },
-    { month:'July', title:'Deep dive research project', subjects:['English','History/Humanities'], description:'Choose a topic from your current curriculum. Research it deeply, go beyond the textbook, and write up your findings.', steps:['Choose a specific angle on a topic you're currently studying.','Find at least 2 sources beyond your textbook. Take notes.','Write a 400-word report with an introduction, body, and conclusion.','Reflect: what did you learn that surprised you?'], deliverable:'400-word research report' },
-    { month:'August', title:'Creative coding project', subjects:['CS','Mathematics'], description:'Build a program that solves a real problem or explores a mathematical concept you've been studying.', steps:['Define the problem your program will solve.','Plan the logic on paper before coding.','Implement and test. Fix at least one bug.','Document: write 3 sentences explaining how it works and what you'd improve.'], deliverable:'Working program + brief documentation' },
-    { month:'September', title:'Personal creative project', subjects:['English'], description:'Write a substantial piece of creative writing connected to a historical or scientific topic you've studied this term.', steps:['Choose a topic from your learning this term and a creative angle.','Plan: characters, setting, narrative arc.','Write a complete first draft without stopping to perfect.','Revise once. Add an author's note explaining connections to real content.'], deliverable:"Creative writing piece + author's note" },
+    { month:'July', title:'Deep dive research project', subjects:['English','History/Humanities'], description:'Choose a topic from your current curriculum. Research it deeply, go beyond the textbook, and write up your findings.', steps:['Choose a specific angle on a topic you\'\2e currently studying.','Find at least 2 sources beyond your textbook. Take notes.','Write a 400-word report with an introduction, body, and conclusion.','Reflect: what did you learn that surprised you?'], deliverable:'400-word research report' },
+    { month:'August', title:'Creative coding project', subjects:['CS','Mathematics'], description:'Build a program that solves a real problem or explores a mathematical concept you\'\2e been studying.', steps:['Define the problem your program will solve.','Plan the logic on paper before coding.','Implement and test. Fix at least one bug.','Document: write 3 sentences explaining how it works and what you\'\2 improve.'], deliverable:'Working program + brief documentation' },
+    { month:'September', title:'Personal creative project', subjects:['English'], description:'Write a substantial piece of creative writing connected to a historical or scientific topic you\'\2e studied this term.', steps:['Choose a topic from your learning this term and a creative angle.','Plan: characters, setting, narrative arc.','Write a complete first draft without stopping to perfect.','Revise once. Add an author\'\2 note explaining connections to real content.'], deliverable:"Creative writing piece + author\'\2 note" },
   ];
 
   return {
@@ -1188,8 +1188,8 @@ function openProjectDetail(idx,projects,centerIdx,layout,onComplete){
 /* ── Tour ───────────────────────────────────────────────── */
 const TOUR=[
   {sel:'#today-panel',title:"today's overview",desc:"see today's subjects, streak, and jump straight to your plan.",pos:'right'},
-  {sel:'.timer-panel',title:'session timer',desc:'pick a duration, type what you're working on, and start. alarm fires when done.',pos:'right'},
-  {sel:'.checklist-panel',title:'task checklist',desc:'today's tasks auto-loaded. click any task to open the detail panel with ai tips and generated content.',pos:'left'},
+  {sel:'.timer-panel',title:'session timer',desc:'pick a duration, type what you\'\2e working on, and start. alarm fires when done.',pos:'right'},
+  {sel:'.checklist-panel',title:'task checklist',desc:'today\'\2 tasks auto-loaded. click any task to open the detail panel with ai tips and generated content.',pos:'left'},
   {sel:'.detail-panel',title:'detail panel',desc:'context, ai-generated content, and a chat box for any task.',pos:'left'},
   {sel:'.music-panel',title:'ambient sound',desc:'brown noise, rain, or binaural focus tones. plays while you study.',pos:'right'},
   {sel:'[data-tab="plan"]',title:'my plan',desc:'your full week day by day. ai-generated from your documents.',pos:'right'},
