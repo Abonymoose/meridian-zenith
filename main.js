@@ -276,7 +276,7 @@ function defaultPlan(prefs) {
 
 
 /* ── Onboarding ────────────────────────────────────────── */
-let obData = { grade:'Grade 8', hours:'1 hour', days:[], focus:[], style:'', coaching:'' };
+let obData = { grade:'Grade 8', hours:'1 hour', days:[], focus:[], style:'', coaching:'', roadmapSubjects:[] };
 let obReportFile = null, obSyllabusFile = null, obExistingFile = null;
 let obHasExisting = false;
 let obCurrentStep = 1;
@@ -386,32 +386,43 @@ function initOnboarding() {
     obCurrentStep = 8; obGo('ob-s8');
   });
 
-  // Step 8: coaching
-  document.getElementById('ob-n8').addEventListener('click', () => {
-    obData.coaching = document.getElementById('ob-coaching').value.trim();
-    obCurrentStep = 9; obGo('ob-s9');
+  // Step 8: roadmap opt-in
+  document.querySelectorAll('#ob-roadmap-chips .ob-chip').forEach(c => {
+    c.addEventListener('click', () => c.classList.toggle('sel'));
   });
-  document.getElementById('ob-skip8').addEventListener('click', () => { obCurrentStep = 9; obGo('ob-s9'); });
+  document.getElementById('ob-n8').addEventListener('click', () => {
+    obData.roadmapSubjects = [...document.querySelectorAll('#ob-roadmap-chips .ob-chip.sel')].map(c => c.dataset.val);
+    obCurrentStep = 9; obGo('ob-s9c');
+  });
+  document.getElementById('ob-skip8r').addEventListener('click', () => {
+    obData.roadmapSubjects = [];
+    obCurrentStep = 9; obGo('ob-s9c');
+  });
 
-  // Step 9: report card
+  // Step 9: coaching
+  document.getElementById('ob-n9r').addEventListener('click', () => {
+    obData.coaching = document.getElementById('ob-coaching').value.trim();
+    obCurrentStep = 10; obGo('ob-s10r');
+  });
+  document.getElementById('ob-skip9r').addEventListener('click', () => { obCurrentStep = 10; obGo('ob-s10r'); });
+
+  // Report card file handler
   document.getElementById('ob-report-file').addEventListener('change', e => {
     obReportFile = e.target.files[0];
     if (obReportFile) document.getElementById('ob-report-name').textContent = obReportFile.name;
   });
-  document.getElementById('ob-n9').addEventListener('click', () => { obCurrentStep = 10; obGo('ob-s10'); });
-  document.getElementById('ob-skip9').addEventListener('click', () => { obReportFile = null; obCurrentStep = 10; obGo('ob-s10'); });
 
   // Step 10: syllabus
   document.getElementById('ob-syllabus-file').addEventListener('change', e => {
     obSyllabusFile = e.target.files[0];
     if (obSyllabusFile) document.getElementById('ob-syllabus-name').textContent = obSyllabusFile.name;
   });
-  document.getElementById('ob-n10').addEventListener('click', () => { obCurrentStep = 11; obGo('ob-s11'); });
-  document.getElementById('ob-skip10').addEventListener('click', () => { obSyllabusFile = null; obCurrentStep = 11; obGo('ob-s11'); });
+  document.getElementById('ob-n10r').addEventListener('click', () => { obCurrentStep = 11; obGo('ob-s11r'); });
+  document.getElementById('ob-skip10r').addEventListener('click', () => { obSyllabusFile = null; obCurrentStep = 11; obGo('ob-s11r'); });
 
   // Step 11: API key
-  document.getElementById('ob-n11').addEventListener('click', () => kickoffGeneration());
-  document.getElementById('ob-skip11').addEventListener('click', () => kickoffGeneration(true));
+  document.getElementById('ob-n11r').addEventListener('click', () => kickoffGeneration());
+  document.getElementById('ob-skip11r').addEventListener('click', () => kickoffGeneration(true));
 }
 
 function genStep(steps, idx) {
@@ -436,6 +447,7 @@ async function kickoffGeneration(skipAI = false) {
     focus: obData.focus,
     style: obData.style,
     coaching: obData.coaching,
+    roadmapSubjects: obData.roadmapSubjects || [],
   };
 
   applyTheme('light');
@@ -498,12 +510,16 @@ function launchApp() {
   initTabs();
   initSession();
   initPlan();
-  initCS();
+  const hasRoadmap = USER.roadmapSubjects?.length > 0;
+  const csNav = document.querySelector('[data-tab="cs"]');
+  const csMob = document.querySelector('.mob-nav[data-tab="cs"]');
+  if (!hasRoadmap) { if(csNav)csNav.style.display='none'; if(csMob)csMob.style.display='none'; }
+  else initCS();
   initProjects();
   initSettings();
   renderStreak();
   initCountdown();
-  if(!S.get("mz-tour-done"))setTimeout(startTour,600);
+  if(!S.get('mz-tour-done'))setTimeout(startTour,600);
 }
 
 function applyTheme(t) {
@@ -582,7 +598,7 @@ function renderStreak() {
 
 /* ── Timer ─────────────────────────────────────────────── */
 let tInterval=null, tTotal=15*60, tLeft=15*60, tRunning=false;
-const CIRC = 2*Math.PI*70; // r=70
+const CIRC = 2*Math.PI*52; // r=52, circ=327
 
 function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 
@@ -640,23 +656,27 @@ function initTimer() {
   }));
   ci.addEventListener('change',()=>{const v=parseInt(ci.value);if(v>0)setTimer(v);});
 
+  function setStatus(s){const el=document.getElementById('ring-status');if(el)el.textContent=s;}
+  const playIcon='<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>';
+  const pauseIcon='<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+  startBtn.innerHTML=playIcon+' start';
   startBtn.addEventListener('click',()=>{
     if(tLeft===0)return;
     if(tRunning){clearInterval(tInterval);tRunning=false;startBtn.textContent='resume';}
     else{
-      tRunning=true;startBtn.textContent='pause';
+      tRunning=true;startBtn.innerHTML=pauseIcon+' pause';setStatus('running');
       tInterval=setInterval(()=>{
         tLeft--;
         document.getElementById('ring-time').textContent=fmt(tLeft);
         ringUpdate();
-        if(tLeft===0){clearInterval(tInterval);tRunning=false;startBtn.textContent='start';logSession();alarm();}
+        if(tLeft===0){clearInterval(tInterval);tRunning=false;startBtn.innerHTML=playIcon+' start';setStatus('done!');logSession();alarm();}
       },1000);
     }
   });
   resetBtn.addEventListener('click',()=>{
     clearInterval(tInterval);tRunning=false;tLeft=tTotal;
     document.getElementById('ring-time').textContent=fmt(tLeft);
-    document.getElementById('timer-start').textContent='start';
+    startBtn.innerHTML=playIcon+' start';setStatus('ready');
     ringUpdate();
   });
 }

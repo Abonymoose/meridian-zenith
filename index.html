@@ -159,8 +159,25 @@
         <button class="ob-btn-primary" id="ob-n7">continue</button>
       </div>
 
-      <!-- 8 coaching -->
+      <!-- 8 roadmap opt-in -->
       <div class="ob-step" id="ob-s8">
+        <p class="ob-eyebrow">deep-dive roadmap</p>
+        <h2 class="ob-h">want a self-study roadmap for any subject?</h2>
+        <p class="ob-sub">we'll build a 16-week deep-dive curriculum — going well beyond what school teaches. pick any subjects or skip.</p>
+        <div class="ob-chips multi" id="ob-roadmap-chips">
+          <button class="ob-chip" data-val="Computer Science">CS / coding</button>
+          <button class="ob-chip" data-val="Mathematics">Mathematics</button>
+          <button class="ob-chip" data-val="English">English</button>
+          <button class="ob-chip" data-val="Physics">Physics</button>
+          <button class="ob-chip" data-val="Chemistry">Chemistry</button>
+          <button class="ob-chip" data-val="Biology">Biology</button>
+        </div>
+        <button class="ob-btn-primary" id="ob-n8">continue</button>
+        <button class="ob-btn-ghost" id="ob-skip8r">skip — no roadmap</button>
+      </div>
+
+      <!-- 9 coaching -->
+      <div class="ob-step" id="ob-s9c">
         <p class="ob-eyebrow">outside school</p>
         <h2 class="ob-h">any tutoring or coaching outside school?</h2>
         <p class="ob-sub">we'll avoid overlapping with what you're already getting help on</p>
@@ -170,7 +187,7 @@
       </div>
 
       <!-- 9 report card -->
-      <div class="ob-step" id="ob-s9">
+      <div class="ob-step" id="ob-s9r">
         <p class="ob-eyebrow">your results</p>
         <h2 class="ob-h">upload your report card</h2>
         <p class="ob-sub">AI reads your grades and teacher comments to know exactly where to focus</p>
@@ -181,12 +198,12 @@
             <span id="ob-report-name">tap to upload PDF or image</span>
           </div>
         </label>
-        <button class="ob-btn-primary" id="ob-n9">continue</button>
-        <button class="ob-btn-ghost" id="ob-skip9">skip for now</button>
+        <button class="ob-btn-primary" id="ob-n9r">continue</button>
+        <button class="ob-btn-ghost" id="ob-skip9r">skip for now</button>
       </div>
 
       <!-- 10 syllabus -->
-      <div class="ob-step" id="ob-s10">
+      <div class="ob-step" id="ob-s10r">
         <p class="ob-eyebrow">your curriculum</p>
         <h2 class="ob-h">upload your syllabus or course planner</h2>
         <p class="ob-sub">any document showing what you study this term — used to make tasks syllabus-specific</p>
@@ -197,22 +214,22 @@
             <span id="ob-syllabus-name">tap to upload PDF or image</span>
           </div>
         </label>
-        <button class="ob-btn-primary" id="ob-n10">continue</button>
-        <button class="ob-btn-ghost" id="ob-skip10">skip for now</button>
+        <button class="ob-btn-primary" id="ob-n10r">continue</button>
+        <button class="ob-btn-ghost" id="ob-skip10r">skip for now</button>
       </div>
 
       <!-- 11 api key -->
-      <div class="ob-step" id="ob-s11">
+      <div class="ob-step" id="ob-s11r">
         <p class="ob-eyebrow">ai</p>
         <h2 class="ob-h">add your groq api key</h2>
         <p class="ob-sub">free at <strong>console.groq.com</strong> — powers AI tips, content generation, and your personalised plan. stays in your browser only.</p>
         <input id="ob-apikey" class="ob-input" type="password" placeholder="gsk_…" autocomplete="off"/>
-        <button class="ob-btn-primary" id="ob-n11">build my plan →</button>
-        <button class="ob-btn-ghost" id="ob-skip11">skip — use without AI</button>
+        <button class="ob-btn-primary" id="ob-n11r">build my plan →</button>
+        <button class="ob-btn-ghost" id="ob-skip11r">skip — use without AI</button>
       </div>
 
       <!-- 12 generating -->
-      <div class="ob-step" id="ob-s12">
+      <div class="ob-step" id="ob-s12r">
         <div class="ob-generating">
           <div class="ob-spinner"></div>
           <h2 class="ob-h" id="ob-gen-h">building your plan…</h2>
@@ -304,12 +321,12 @@
 
     <!-- SESSION -->
     <div id="tab-session" class="tab active">
-      <div class="session-grid">
+      <div class="session-layout">
 
-        <!-- Col 1: Today + Countdown + Music -->
-        <div class="col col-1">
+        <!-- Left: Today + Countdown + Music stacked -->
+        <div class="s-sidebar">
 
-          <div class="panel" id="today-panel">
+          <div class="panel s-today" id="today-panel">
             <div class="panel-row">
               <span class="eyebrow">today</span>
               <div id="streak-widget" class="streak-widget"></div>
@@ -317,25 +334,27 @@
             <div class="today-day" id="today-day"></div>
             <div class="today-date-str" id="today-date-str"></div>
             <div id="today-subjects-list" class="today-subjects-list"></div>
-            <button class="btn-accent btn-sm mt-auto" id="go-today-btn">open today's plan →</button>
+            <button class="btn-accent btn-sm" id="go-today-btn">open today's plan →</button>
           </div>
 
-          <div class="panel">
-            <span class="eyebrow">term 1</span>
+          <div class="panel s-countdown">
+            <div class="panel-row">
+              <span class="eyebrow">term 1</span>
+              <p class="cd-meta" id="cd-meta"></p>
+            </div>
             <div class="countdown-row">
               <div class="cd-stat"><span class="cd-num" id="cd-days">—</span><span class="cd-lbl">days</span></div>
               <div class="cd-stat"><span class="cd-num" id="cd-weeks">—</span><span class="cd-lbl">weeks</span></div>
               <div class="cd-stat"><span class="cd-num" id="cd-pct">—</span><span class="cd-lbl">% done</span></div>
             </div>
             <div class="progress-track"><div class="progress-fill" id="cd-bar"></div></div>
-            <p class="cd-meta" id="cd-meta"></p>
           </div>
 
-          <div class="panel music-panel">
+          <div class="panel s-music">
             <div class="panel-row">
               <span class="eyebrow">ambient</span>
               <div class="vol-row">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tx-3)" stroke-width="1.5" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--tx-3)" stroke-width="1.5" stroke-linecap="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>
                 <input type="range" id="vol-slider" class="vol-slider" min="0" max="1" step="0.05" value="0.35"/>
               </div>
             </div>
@@ -343,58 +362,77 @@
               <button class="music-chip active" data-snd="none">off</button>
               <button class="music-chip" data-snd="brown">brown noise</button>
               <button class="music-chip" data-snd="rain">rain</button>
-              <button class="music-chip" data-snd="focus">focus tones</button>
+              <button class="music-chip" data-snd="focus">focus</button>
             </div>
           </div>
 
         </div>
 
-        <!-- Col 2: Timer -->
-        <div class="col col-2">
-          <div class="panel timer-panel">
-            <span class="eyebrow">timer</span>
-            <div class="presets">
-              <button class="preset active" data-m="15">15</button>
-              <button class="preset" data-m="25">25</button>
-              <button class="preset" data-m="30">30</button>
-              <button class="preset" data-m="60">60</button>
-              <button class="preset" data-m="0">custom</button>
+        <!-- Center: Timer (compact, elegant) -->
+        <div class="s-timer-col">
+          <div class="panel s-timer-panel">
+
+            <div class="timer-top">
+              <span class="eyebrow">focus timer</span>
+              <div class="presets">
+                <button class="preset active" data-m="15">15</button>
+                <button class="preset" data-m="25">25</button>
+                <button class="preset" data-m="30">30</button>
+                <button class="preset" data-m="60">60</button>
+                <button class="preset" data-m="0">—</button>
+              </div>
             </div>
-            <input type="number" id="custom-min" class="custom-min-input" placeholder="min" min="1" max="180"/>
-            <div class="ring-wrap">
-              <svg class="ring-svg" viewBox="0 0 160 160">
-                <circle class="ring-track" cx="80" cy="80" r="70"/>
-                <circle class="ring-prog" id="ring-prog" cx="80" cy="80" r="70"/>
-              </svg>
-              <span class="ring-time" id="ring-time">15:00</span>
+
+            <input type="number" id="custom-min" class="custom-min-input" placeholder="minutes" min="1" max="180"/>
+
+            <div class="timer-center">
+              <div class="ring-wrap">
+                <svg class="ring-svg" viewBox="0 0 120 120">
+                  <circle class="ring-track" cx="60" cy="60" r="52"/>
+                  <circle class="ring-prog" id="ring-prog" cx="60" cy="60" r="52"/>
+                </svg>
+                <div class="ring-inner">
+                  <span class="ring-time" id="ring-time">15:00</span>
+                  <span class="ring-status" id="ring-status">ready</span>
+                </div>
+              </div>
             </div>
-            <input type="text" id="timer-label" class="timer-label-input" placeholder="what are you working on?"/>
-            <div class="timer-btns">
-              <button class="btn-accent" id="timer-start">start</button>
-              <button class="btn-outline" id="timer-reset">reset</button>
+
+            <div class="timer-bottom">
+              <input type="text" id="timer-label" class="timer-label-input" placeholder="working on…"/>
+              <div class="timer-btns">
+                <button class="timer-start-btn" id="timer-start">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                  start
+                </button>
+                <button class="timer-reset-btn" id="timer-reset">reset</button>
+              </div>
             </div>
-            <div class="session-log-wrap">
+
+            <div class="s-log-wrap">
               <span class="eyebrow">log</span>
               <div id="session-log"><p class="empty-state">no sessions yet</p></div>
             </div>
+
           </div>
         </div>
 
-        <!-- Col 3: Checklist + Detail -->
-        <div class="col col-3">
-          <div class="checklist-detail-split">
+        <!-- Right: Checklist + Detail panel side by side -->
+        <div class="s-tasks-col">
 
-            <div class="panel checklist-panel">
+          <div class="s-tasks-split">
+
+            <div class="panel s-checklist">
               <div class="panel-row">
                 <span class="eyebrow">tasks</span>
                 <span class="task-count" id="task-count">0 / 0</span>
               </div>
-              <div class="progress-track"><div class="progress-fill" id="task-bar"></div></div>
+              <div class="progress-track" style="margin-bottom:0.5rem"><div class="progress-fill" id="task-bar"></div></div>
               <div id="task-list" class="task-list"></div>
               <button class="btn-ghost btn-xs" id="reset-tasks">reset</button>
             </div>
 
-            <div class="panel detail-panel" id="detail-panel">
+            <div class="panel s-detail" id="detail-panel">
               <div class="detail-empty" id="detail-empty">← click a task</div>
               <div id="detail-body-wrap" style="display:none">
                 <div class="panel-row">
@@ -406,13 +444,13 @@
 
                 <div id="detail-gen-wrap" style="display:none">
                   <div class="section-head">
-                    <span class="eyebrow accent">✦ today's content</span>
+                    <span class="eyebrow accent">✦ content</span>
                     <button class="icon-btn" id="detail-gen-refresh">↻</button>
                   </div>
                   <div id="detail-gen" class="gen-content"></div>
                 </div>
 
-                <button class="btn-accent btn-sm" id="detail-set-timer" style="display:none">▶ set timer & start</button>
+                <button class="btn-accent btn-sm" id="detail-set-timer" style="display:none">▶ set timer</button>
 
                 <div id="detail-ai-wrap" style="display:none">
                   <div class="section-head">
