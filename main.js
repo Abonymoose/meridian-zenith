@@ -345,9 +345,17 @@ function obProgress(step) {
 }
 
 function obGo(id) {
-  document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
   const el = document.getElementById(id);
-  if (el) { el.classList.add('active'); obCurrentStep = parseInt(id.replace('ob-s','')) || obCurrentStep; }
+  if (!el) {
+    // Never blank the screen over a bad id — that strands the user with
+    // no visible step and no way forward.
+    console.error(`obGo: no such step "${id}" — staying put`);
+    notify('Something went wrong moving to the next step. Please report this.', 'warn');
+    return;
+  }
+  document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  obCurrentStep = parseInt(id.replace('ob-s', '')) || obCurrentStep;
   obProgress(obCurrentStep);
 }
 
@@ -403,7 +411,7 @@ function initOnboarding() {
     if (obExistingFile) document.getElementById('ob-existing-name').textContent = obExistingFile.name;
   });
   document.getElementById('ob-n3a').addEventListener('click', () => {
-    obCurrentStep = 11; obGo('ob-s11');
+    obCurrentStep = 11; obGo('ob-s11r');
   });
 
   // Step 3b: grade
@@ -457,12 +465,23 @@ function initOnboarding() {
     obCurrentStep = 9; obGo('ob-s9c');
   });
 
-  // Step 9: coaching
-  document.getElementById('ob-n9r').addEventListener('click', () => {
+  // Step 9a: coaching
+  document.getElementById('ob-n9c').addEventListener('click', () => {
     obData.coaching = document.getElementById('ob-coaching').value.trim();
-    obCurrentStep = 10; obGo('ob-s10r');
+    obGo('ob-s9r');
   });
-  document.getElementById('ob-skip9r').addEventListener('click', () => { obCurrentStep = 10; obGo('ob-s10r'); });
+  document.getElementById('ob-skip9c').addEventListener('click', () => {
+    obData.coaching = '';
+    obGo('ob-s9r');
+  });
+
+  // Step 9b: report card
+  document.getElementById('ob-n9r').addEventListener('click', () => { obGo('ob-s10r'); });
+  document.getElementById('ob-skip9r').addEventListener('click', () => {
+    obReportFile = null;
+    document.getElementById('ob-report-name').textContent = '';
+    obGo('ob-s10r');
+  });
 
   // Report card file handler
   document.getElementById('ob-report-file').addEventListener('change', e => {
@@ -510,7 +529,7 @@ async function kickoffGeneration(skipAI = false) {
 
   applyTheme('light');
   obCurrentStep = 12;
-  obGo('ob-s12');
+  obGo('ob-s12r');
 
   const STEPS = ['reading documents','analysing your data','generating your plan','building cs roadmap','finishing up'];
   genStep(STEPS, 0);

@@ -57,6 +57,7 @@ Everything is in localStorage under `mz*` keys — profile, streak, sessions, re
 ```bash
 node test-features.js   # sessions, spaced repetition, exams, backup
 node test-overview.js   # overview rendering
+node test-onboarding.js # walks every onboarding path, fails on any dead end
 ```
 
 ## Stack
