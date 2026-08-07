@@ -357,7 +357,11 @@ body{background:var(--bg);color:var(--tx)}
 .task-text:hover{color:var(--tx)}
 .task-item.done .task-text{color:var(--tx-3);text-decoration:line-through}
 .task-pill{font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:var(--a);background:var(--a-m);border:1px solid var(--bd);padding:1px 5px;border-radius:99px;white-space:nowrap;flex-shrink:0}
-.task-ai{color:var(--a);font-size:0.58rem;flex-shrink:0}
+.task-ai{
+  display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--a);opacity:0.55;flex-shrink:0;
+  margin-left:0.4rem;vertical-align:middle;
+}
 .task-arrow{color:var(--tx-3);font-size:1rem;flex-shrink:0;transition:all 0.15s;padding:0 2px}
 .task-item:hover .task-arrow{color:var(--a);transform:translateX(2px)}
 
@@ -941,4 +945,61 @@ details.gen-block summary{cursor:pointer;list-style:none;padding:0.3rem 0.7rem;f
   .review-wrap{padding:1.25rem 1rem}
   .review-actions{grid-template-columns:repeat(2,1fr)}
   .review-hint{display:none}
+}
+
+/* ── AI content blocks ──────────────────────────────────────────────────────
+   Rewritten: sections are collapsible and only the first opens, so a long
+   answer no longer fills the panel. Markdown is rendered rather than shown. */
+.gen-block{
+  background:var(--panel2);border:1px solid var(--bd);border-radius:8px;
+  overflow:hidden;margin-bottom:0.4rem;
+}
+.gen-block:last-child{margin-bottom:0}
+details.gen-block summary{
+  cursor:pointer;list-style:none;
+  padding:0.42rem 0.7rem;
+  font-size:0.62rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;
+  color:var(--tx-3);background:var(--bg);
+  display:flex;align-items:center;gap:0.4rem;
+}
+details.gen-block summary::-webkit-details-marker{display:none}
+details.gen-block summary::before{
+  content:'›';font-size:0.85rem;line-height:1;
+  transition:transform 0.15s;color:var(--tx-3);
+}
+details.gen-block[open] summary::before{transform:rotate(90deg)}
+details.gen-block summary:hover{color:var(--tx-2)}
+
+.gen-body{font-size:0.78rem;color:var(--tx-2);line-height:1.65;padding:0.6rem 0.75rem 0.7rem}
+.gen-body p{margin:0 0 0.5rem}
+.gen-body p:last-child{margin-bottom:0}
+.gen-body strong{color:var(--tx);font-weight:600}
+.gen-body em{font-style:italic}
+.gen-body code{
+  font-family:'JetBrains Mono',monospace;font-size:0.72rem;
+  background:var(--bg);border:1px solid var(--bd);border-radius:4px;padding:0.05rem 0.28rem;
+}
+.gen-h{font-size:0.76rem;font-weight:650;color:var(--tx);margin:0 0 0.35rem}
+.gen-list{margin:0 0 0.5rem;padding-left:1.15rem}
+.gen-list:last-child{margin-bottom:0}
+.gen-list li{margin-bottom:0.22rem}
+.gen-list li:last-child{margin-bottom:0}
+
+/* ── Onboarding back button ─────────────────────────────────────────────────── */
+.ob-back{
+  position:absolute;top:1.5rem;left:1.5rem;
+  display:flex;align-items:center;gap:0.3rem;
+  background:none;border:none;cursor:pointer;font-family:inherit;
+  font-size:0.75rem;color:var(--tx-3);padding:0.4rem 0.5rem;border-radius:6px;
+  transition:color 0.15s,background 0.15s;
+}
+.ob-back:hover{color:var(--tx-2);background:var(--panel2)}
+
+/* ── Recovery + generation failure ──────────────────────────────────────────── */
+.rec-actions{display:flex;flex-direction:column;gap:0.5rem;margin-top:1.25rem}
+.gen-fail{margin-top:1.5rem;width:100%;max-width:340px}
+.gen-fail .settings-hint{text-align:center;margin-top:0.6rem}
+
+@media (max-width:640px){
+  .ob-back{top:0.85rem;left:0.85rem}
 }

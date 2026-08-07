@@ -13,10 +13,14 @@
 
 <!-- ████  ONBOARDING  ████ -->
 <div id="onboarding" class="ob-shell" style="display:none">
-  <div class="ob-card">
+  <button class="ob-back" id="ob-back" style="display:none" aria-label="Go back">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        back
+      </button>
+      <div class="ob-card">
 
     <div class="ob-logo">
-      <svg width="110" height="28" viewBox="0 0 110 28">
+      <svg width="110" height="30" viewBox="0 -4 110 34">
         <line x1="4" y1="22" x2="14" y2="14" stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
         <line x1="14" y1="14" x2="24" y2="6"  stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
         <line x1="24" y1="6"  x2="36" y2="2"  stroke="var(--a)" stroke-width="0.8" opacity="0.4"/>
@@ -162,9 +166,9 @@
       <!-- 8 roadmap opt-in -->
       <div class="ob-step" id="ob-s8">
         <p class="ob-eyebrow">deep-dive roadmap</p>
-        <h2 class="ob-h">want a self-study roadmap for any subject?</h2>
-        <p class="ob-sub">we'll build a 16-week deep-dive curriculum — going well beyond what school teaches. pick any subjects or skip.</p>
-        <div class="ob-chips multi" id="ob-roadmap-chips">
+        <h2 class="ob-h">want a self-study roadmap?</h2>
+        <p class="ob-sub">we'll build a 16-week deep-dive curriculum for one subject — going well beyond what school teaches. pick one, add your own, or skip.</p>
+        <div class="ob-chips" id="ob-roadmap-chips">
           <button class="ob-chip" data-val="Computer Science">CS / coding</button>
           <button class="ob-chip" data-val="Mathematics">Mathematics</button>
           <button class="ob-chip" data-val="English">English</button>
@@ -172,6 +176,7 @@
           <button class="ob-chip" data-val="Chemistry">Chemistry</button>
           <button class="ob-chip" data-val="Biology">Biology</button>
         </div>
+        <input type="text" id="ob-roadmap-custom" class="ob-input" placeholder="or type any other subject"/>
         <button class="ob-btn-primary" id="ob-n8">continue</button>
         <button class="ob-btn-ghost" id="ob-skip8r">skip — no roadmap</button>
       </div>
@@ -248,7 +253,7 @@
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
-      <svg width="100" height="26" viewBox="0 0 100 26">
+      <svg width="100" height="26" viewBox="0 -4 100 32">
         <line x1="4" y1="20" x2="12" y2="13" stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
         <line x1="12" y1="13" x2="20" y2="6"  stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
         <line x1="20" y1="6"  x2="30" y2="2"  stroke="var(--a-l)" stroke-width="0.8" opacity="0.5"/>
@@ -304,7 +309,7 @@
   <!-- Mobile top bar -->
   <div class="mobile-bar">
     <div class="mobile-logo">
-      <svg width="80" height="22" viewBox="0 0 80 22">
+      <svg width="80" height="24" viewBox="0 -2 80 26">
         <circle cx="8" cy="11" r="3" fill="var(--a)"/>
         <circle cx="18" cy="5"  r="4" fill="var(--a)"/>
         <circle cx="28" cy="11" r="2.5" fill="var(--a)" opacity="0.6"/>
@@ -458,7 +463,7 @@
 
                 <div id="detail-gen-wrap" style="display:none">
                   <div class="section-head">
-                    <span class="eyebrow accent">✦ content</span>
+                    <span class="eyebrow accent">content</span>
                     <button class="icon-btn" id="detail-gen-refresh">↻</button>
                   </div>
                   <div id="detail-gen" class="gen-content"></div>
@@ -468,7 +473,7 @@
 
                 <div id="detail-ai-wrap" style="display:none">
                   <div class="section-head">
-                    <span class="eyebrow accent">✦ ai tip</span>
+                    <span class="eyebrow accent">tip</span>
                     <button class="icon-btn" id="detail-tip-refresh">↻</button>
                   </div>
                   <div id="detail-tip" class="ai-tip"></div>
@@ -673,6 +678,10 @@
         <input type="date" id="s-exam-date" class="ob-input"/>
         <button class="btn-accent btn-sm" id="s-exam-add">add</button>
       </div>
+      <div class="settings-row">
+        <button class="btn-outline btn-sm" id="s-exam-import">import timetable from a file</button>
+        <input type="file" id="s-exam-file" accept="image/*,application/json,.json" style="display:none"/>
+      </div>
       <p class="settings-hint">within two weeks of an exam, that subject moves to the top of your day and its review cards come back sooner.</p>
     </div>
 
@@ -681,6 +690,8 @@
       <div class="settings-row">
         <button class="btn-outline btn-sm" id="s-export">export to file</button>
         <button class="btn-outline btn-sm" id="s-import-btn">restore from file</button>
+        <button class="btn-outline btn-sm" id="s-import-plan">import a plan</button>
+        <input type="file" id="s-plan-file" accept="application/json,.json,image/*" style="display:none"/>
         <input type="file" id="s-import" accept="application/json,.json" style="display:none"/>
       </div>
       <p class="settings-hint">everything is stored in this browser only. export before clearing browsing data or switching device.</p>

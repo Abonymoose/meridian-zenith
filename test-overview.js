@@ -22,10 +22,10 @@ const ck=(l,g,w)=>{g===w?pass++:(fail++,console.log(`FAIL ${l}: got ${g}, want $
 
 const dow=new Date().getDay();
 const basePlan={days:{[dow]:{name:'Today',subjects:[{name:'Physics',color:'#E0F0FF',tasks:[{text:'a'},{text:'b'}]}]}},
-  csRoadmap:[{month:'June',theme:'binary',weeks:[{},{}]},{month:'July',theme:'sorting',weeks:[{}]}]};
+  roadmap:[{month:'June',theme:'binary',weeks:[{},{}]},{month:'July',theme:'sorting',weeks:[{}]}]};
 
 console.log('--- with grades ---');
-A.setUser({name:'P',focus:['Physics','History'],plan:{...basePlan,
+A.setUser({name:'P',focus:['Physics','History'],plan:{...basePlan,roadmapSubject:'Computer Science',
   grades:[{name:'Physics',score:76,grade:'B+'},{name:'CS',score:95,grade:'A+'},{name:'History',score:72,grade:'B+'}]}});
 A.initOverview();
 let h=grid.innerHTML;
@@ -33,7 +33,7 @@ ck('renders grade rows', (h.match(/ov-subject-row/g)||[]).length, 3);
 ck('shows focus badge', h.includes('ov-focus-badge'), true);
 ck('focus lists Physics', h.includes('Physics · History'), true);
 ck('no empty state', h.includes('No grades yet'), false);
-ck('cs card shown', h.includes('cs roadmap'), true);
+ck('roadmap card shown', h.includes('roadmap'), true);
 ck('cs month count', h.includes('>2</div>'), true);
 ck('cs week count', h.includes('months · 3 weeks'), true);
 ck('today count 0/2', h.includes('> / 2<'), true);
@@ -49,7 +49,7 @@ ck('settings link', h.includes('ov-to-settings'), true);
 console.log('--- no cs roadmap (opt-out) ---');
 A.setUser({name:'P',focus:[],plan:{days:basePlan.days}});
 A.initOverview(); h=grid.innerHTML;
-ck('cs card hidden', h.includes('cs roadmap'), false);
+ck('roadmap card hidden', h.includes('months ·'), false);
 
 console.log('--- rest day ---');
 A.setUser({name:'P',focus:[],plan:{days:{}}});

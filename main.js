@@ -125,9 +125,106 @@ async function extractDoc(file, type) {
   return text;
 }
 
+/* ── Plan validation ───────────────────────────────────── */
+/* The model returns free-form JSON. Parsing succeeding does not mean the
+   shape is usable — a missing `subjects` array used to throw inside
+   launchApp and leave the app permanently unbootable. Everything the
+   renderers touch is checked and coerced here, once, before it is saved. */
+
+const PASTELS = ['#FDE8D8','#E0F0FF','#DCF4E8','#E8E0F8','#FDE8EE','#E0F4EC','#F0E8D4','#E8F4DC','#E0EEF8','#FEF8EC'];
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+class PlanError extends Error {}
+
+const asText = v => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
+const asInt = (v, fallback) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : fallback; };
+
+/** Coerce anything into a renderable plan, or throw if it's unsalvageable. */
+function validatePlan(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new PlanError('The plan came back in the wrong format.');
+  }
+
+  const plan = { summary: asText(raw.summary), days: {} };
+
+  // days may arrive as an object keyed by day number, or as an array.
+  let entries = [];
+  if (Array.isArray(raw.days)) {
+    entries = raw.days.map((d, i) => [String(i), d]);
+  } else if (raw.days && typeof raw.days === 'object') {
+    entries = Object.entries(raw.days);
+  }
+
+  for (const [key, day] of entries) {
+    const dow = asInt(key, null);
+    if (dow === null || dow < 0 || dow > 6) continue;
+    if (!day || typeof day !== 'object') continue;
+
+    const subjects = (Array.isArray(day.subjects) ? day.subjects : [])
+      .filter(s => s && typeof s === 'object')
+      .map((s, si) => ({
+        name: asText(s.name) || 'Study',
+        color: /^#[0-9a-f]{3,8}$/i.test(asText(s.color)) ? s.color : PASTELS[si % PASTELS.length],
+        duration: asText(s.duration),
+        tasks: (Array.isArray(s.tasks) ? s.tasks : [])
+          .map(t => (typeof t === 'string' ? { text: t } : t))
+          .filter(t => t && typeof t === 'object' && asText(t.text))
+          .map(t => ({
+            text: asText(t.text),
+            mins: asInt(t.mins, 0) > 0 ? asInt(t.mins, 0) : null,
+            detail: asText(t.detail),
+            generateContent: t.generateContent === true,
+          })),
+      }))
+      .filter(s => s.tasks.length);
+
+    if (!subjects.length) continue;
+    plan.days[dow] = { name: asText(day.name) || DAY_NAMES[dow], subjects };
+  }
+
+  if (!Object.keys(plan.days).length) {
+    throw new PlanError('The plan came back with no usable study days in it.');
+  }
+
+  plan.grades = (Array.isArray(raw.grades) ? raw.grades : [])
+    .filter(g => g && typeof g === 'object' && asText(g.name))
+    .map(g => ({ name: asText(g.name), score: asInt(g.score, null), grade: asText(g.grade) }))
+    .filter(g => g.score !== null);
+
+  plan.roadmap = (Array.isArray(raw.roadmap) ? raw.roadmap : Array.isArray(raw.csRoadmap) ? raw.csRoadmap : [])
+    .filter(m => m && typeof m === 'object')
+    .map(m => ({
+      month: asText(m.month),
+      theme: asText(m.theme),
+      weeks: (Array.isArray(m.weeks) ? m.weeks : [])
+        .filter(w => w && typeof w === 'object')
+        .map(w => ({ range: asText(w.range), title: asText(w.title), description: asText(w.description) })),
+      resources: (Array.isArray(m.resources) ? m.resources : []).map(asText).filter(Boolean),
+    }));
+  plan.roadmapSubject = asText(raw.roadmapSubject);
+
+  plan.projects = (Array.isArray(raw.projects) ? raw.projects : [])
+    .filter(p => p && typeof p === 'object' && asText(p.title))
+    .map(p => ({
+      month: asText(p.month),
+      title: asText(p.title),
+      subjects: (Array.isArray(p.subjects) ? p.subjects : []).map(asText).filter(Boolean),
+      description: asText(p.description),
+      steps: (Array.isArray(p.steps) ? p.steps : []).map(asText).filter(Boolean),
+      deliverable: asText(p.deliverable),
+    }));
+
+  return plan;
+}
+
+/** Cheap check for a plan already sitting in storage. */
+function planIsUsable(plan) {
+  try { validatePlan(plan); return true; } catch { return false; }
+}
+
 /* ── Plan generation ───────────────────────────────────── */
 async function generatePlan(prefs, reportText, syllabusText, existingPlanText) {
-  const { name, grade, hours, days, focus, style, coaching } = prefs;
+  const { name, grade, hours, days, focus, style, coaching, roadmapSubject } = prefs;
   const DAY_MAP = { Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6, Sunday:0 };
   const dayNums = days.map(d => DAY_MAP[d]).filter(n => n !== undefined);
 
@@ -153,7 +250,9 @@ CRITICAL RULES — follow exactly:
 3. DAYS: ONLY generate day numbers ${dayNums.join(',')} — no others.
 4. TIME: Total task mins per day must fit within ${hours||'1 hour'}. Task mins must be integers (5,10,15,20,25,30).
 5. PROJECTS: Generate 4 unique projects tailored to THIS student's actual subjects — not generic projects. Each project should combine 2-3 of their real subjects in a creative way.
-6. CS ROADMAP: Generate a CS roadmap appropriate for ${grade||'Grade 8'}. For Grade 5-6: focus on Scratch, basic Python, algorithms as puzzles. For Grade 7-8: binary, sorting, data structures, recursion.
+6. ROADMAP: ${roadmapSubject
+  ? `Generate a 4-month, 16-week self-study deep-dive roadmap for ONE subject: ${roadmapSubject}. Pitch it for ${grade||'Grade 8'} but go well beyond school level. Build it fresh for this student — do not reuse a stock curriculum. Set "roadmapSubject" to "${roadmapSubject}".`
+  : `The student wants NO roadmap. Return "roadmap": [] and "roadmapSubject": "".`}
 7. No coaching overlap. generateContent:true only for reading/problem/exercise tasks.
 8. Every task needs a "detail" field with specific, actionable advice.
 8b. "grades": copy every subject and mark from the report card. "score" must be a number 0-100. Omit the field entirely if no report card was provided — never invent marks.
@@ -166,175 +265,98 @@ Respond ONLY with valid JSON:
   "days": {
     "${dayNums[0]||1}": { "name": "${days[0]||'Monday'}", "subjects": [{ "name": "Real Subject Name from docs", "color": "#FDE8D8", "duration": "X min", "tasks": [{ "text": "specific task with real topic", "mins": 15, "detail": "actionable how-to", "generateContent": false }] }] }
   },
-  "csRoadmap": [{ "month": "Month name", "theme": "theme", "weeks": [{ "range": "Wk 1-2", "title": "topic", "description": "what to learn and do" }], "resources": ["resource"] }],
+  "roadmapSubject": "${roadmapSubject || ''}",
+  "roadmap": [{ "month": "Month name", "theme": "theme", "weeks": [{ "range": "Wk 1-2", "title": "topic", "description": "what to learn and do" }], "resources": ["resource"] }],
   "projects": [{ "month": "Month name", "title": "project title", "subjects": ["Real Subject 1","Real Subject 2"], "description": "what it involves and why it matters", "steps": ["concrete step 1","concrete step 2","concrete step 3","concrete step 4"], "deliverable": "specific thing they produce" }]
 }
 
 Generate ALL ${days.length} day(s): ${days.map((d,i)=>`${dayNums[i]}=${d}`).join(', ')}
-4 months in csRoadmap. 4 projects using this student's REAL subjects.`;
+${roadmapSubject ? `4 months in roadmap, all about ${roadmapSubject}.` : 'roadmap must be [].'} 4 projects using this student's REAL subjects.`;
 
   const reply = await groq([
     { role: 'system', content: 'Expert educational planner. Return valid JSON only. No markdown. No explanation.' },
     { role: 'user', content: prompt }
   ], 2800);
 
+  let parsed;
   try {
     const clean = reply.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-    return JSON.parse(clean);
+    parsed = JSON.parse(clean);
   } catch(e) {
     console.error('Plan parse fail', e, reply?.slice(0,300));
     throw new ApiError('The model returned a plan that could not be read. Try generating again.');
   }
+  // Never hand back an unvalidated plan — a missing array here becomes an
+  // unbootable app once it is saved.
+  return validatePlan(parsed);
 }
 
-function defaultPlan(prefs) {
-  const { name, grade } = prefs;
-  const g = parseInt((grade||'8').replace(/\D/g,'')) || 8;
+/* defaultPlan removed. A generic hardcoded plan pretended the app had
+   worked when it hadn't. Generation failure now offers retry or import
+   instead of silently handing over someone else's curriculum. */
 
-  // Grade-appropriate subject sets — these are fallbacks only when no docs uploaded
-  const subjectSets = {
-    5: [
-      { name:'English', color:'#FDE8D8', days:[1,3,5] },
-      { name:'Mathematics', color:'#E0F0FF', days:[2,4] },
-      { name:'Science', color:'#E0F4EC', days:[1,4] },
-      { name:'Social Studies', color:'#F0E8D4', days:[2,5] },
-      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
-    ],
-    6: [
-      { name:'English', color:'#FDE8D8', days:[1,3] },
-      { name:'Mathematics', color:'#E0F0FF', days:[2,4] },
-      { name:'Science', color:'#E0F4EC', days:[1,4] },
-      { name:'History', color:'#F0E8D4', days:[2,5] },
-      { name:'Geography', color:'#E8F4DC', days:[3] },
-      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
-    ],
-    7: [
-      { name:'English', color:'#FDE8D8', days:[1] },
-      { name:'Mathematics', color:'#E0F0FF', days:[2] },
-      { name:'Physics', color:'#E8E0F8', days:[2,4] },
-      { name:'Chemistry', color:'#FDE8EE', days:[3] },
-      { name:'Biology', color:'#E0F4EC', days:[4] },
-      { name:'History', color:'#F0E8D4', days:[1] },
-      { name:'Geography', color:'#E8F4DC', days:[4] },
-      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
-      { name:'French', color:'#E0EEF8', days:[5] },
-    ],
-    8: [
-      { name:'English', color:'#FDE8D8', days:[1] },
-      { name:'Mathematics', color:'#E0F0FF', days:[2] },
-      { name:'Physics', color:'#E8E0F8', days:[2] },
-      { name:'Chemistry', color:'#FDE8EE', days:[3] },
-      { name:'Biology', color:'#E0F4EC', days:[4] },
-      { name:'History', color:'#F0E8D4', days:[1] },
-      { name:'Geography', color:'#E8F4DC', days:[4] },
-      { name:'Computer Science', color:'#DCF4E8', days:[3,5] },
-      { name:'French', color:'#E0EEF8', days:[5] },
-    ],
-  };
+/* ── Plan import ───────────────────────────────────────── */
+/* Accepts either a backup export or a photo/PDF of a schedule. The file
+   type decides which path runs; both end in a validated plan. */
 
-  const subjects = subjectSets[Math.min(g, 8)] || subjectSets[8];
-  const studyDays = prefs.days?.length ? prefs.days : ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const DAY_MAP = { Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
-  const dayNums = studyDays.map(d => DAY_MAP[d]).filter(Boolean);
+function looksLikeBackup(file) {
+  return file.type === 'application/json' || /\.json$/i.test(file.name);
+}
 
-  // Build days dynamically
-  const days = {};
-  const DAY_NAMES = { 1:'Monday', 2:'Tuesday', 3:'Wednesday', 4:'Thursday', 5:'Friday', 6:'Saturday' };
+async function importPlanFromBackup(file) {
+  let parsed;
+  try { parsed = JSON.parse(await file.text()); }
+  catch { throw new Error('That JSON file could not be read.'); }
 
-  dayNums.forEach(dow => {
-    const daySubjects = dow === 6
-      ? [{ name:'Project', color:'#EDF5E9', duration:'60 min', tasks:[
-          { text:"Re-read project brief — what is today\'\2 deliverable?", mins:5, detail:'Answer in one sentence: "By the end of today I will have…"' },
-          { text:'First 25-min work block: substance only', mins:25, detail:'Resist polishing before it is good.' },
-          { text:'5-min break', mins:5, detail:'Actually stop. The break is part of the method.' },
-          { text:'Second 25-min work block', mins:25, detail:'Push through to completion.' },
-          { text:'Write 2 sentences: what you did + next step', mins:5, detail:'Prevents starting from zero next week.' },
-        ]}]
-      : subjects.filter(s => s.days.includes(dow)).map(s => ({
-          name: s.name,
-          color: s.color,
-          duration: '30 min',
-          tasks: [
-            { text: `${s.name}: work through this week's topic`, mins: 20, detail: `Read actively, take brief notes, connect to what you already know. Pause when something is unclear and work it out before continuing.`, generateContent: true },
-            { text: `${s.name}: attempt practice problems or exercises`, mins: 10, detail: 'Apply what you just studied. Check your work and understand any mistakes.' },
-          ]
-        }));
+  // A full app backup…
+  if (parsed && typeof parsed.data === 'object' && parsed.data?.mz) {
+    const profile = JSON.parse(parsed.data.mz);
+    if (!profile?.plan) throw new Error('That backup has no plan in it.');
+    return { plan: validatePlan(profile.plan), profile, whole: parsed };
+  }
+  // …or a bare plan object.
+  if (parsed && (parsed.days || parsed.plan)) {
+    return { plan: validatePlan(parsed.plan || parsed), profile: null, whole: null };
+  }
+  throw new Error('That file is not a Meridian backup or plan.');
+}
 
-    if (daySubjects.length > 0) {
-      days[dow] = { name: DAY_NAMES[dow], subjects: daySubjects };
+async function importPlanFromDocument(file, prefs) {
+  const text = await extractDoc(file, 'existing');
+  const plan = await generatePlan(
+    { ...prefs, name: prefs.name || USER?.name || 'there' },
+    '', '', text
+  );
+  return { plan, profile: null, whole: null };
+}
+
+/** Import from any supported file and persist. Returns the plan. */
+async function importAnyPlan(file, prefs) {
+  if (looksLikeBackup(file)) {
+    const { plan, whole } = await importPlanFromBackup(file);
+    if (whole) {
+      // Full backup: restore everything, not just the plan.
+      Object.keys(whole.data).filter(k => k.startsWith('mz')).forEach(k => localStorage.setItem(k, whole.data[k]));
+      return plan;
     }
+    USER = USER || {};
+    USER.plan = plan;
+    S.set('mz', USER);
+    return plan;
+  }
+  const { plan } = await importPlanFromDocument(file, prefs || {
+    name: USER?.name, grade: USER?.grade, hours: USER?.hours, days: USER?.days || [],
+    focus: USER?.focus || [], style: USER?.style, coaching: USER?.coaching,
+    roadmapSubject: USER?.roadmapSubject,
   });
-
-  // Grade-appropriate CS roadmap
-  const csRoadmaps = {
-    5: [
-      { month:'Month 1', theme:'introduction to computing', weeks:[
-        { range:'Wk 1-2', title:'What is a computer?', description:'How computers store and process information. Binary basics: why computers use 1s and 0s. Simple exercises converting small numbers.' },
-        { range:'Wk 3-4', title:'Algorithms and sequences', description:'What is an algorithm? Writing step-by-step instructions for everyday tasks. Scratch: build simple animations following algorithmic thinking.' }
-      ], resources:['Code.org — free courses','Scratch (scratch.mit.edu)','CS Unplugged — csunplugged.org'] },
-      { month:'Month 2', theme:'programming basics', weeks:[
-        { range:'Wk 5-6', title:'Variables and loops', description:'What is a variable? Loops: repeat instructions instead of writing them out. Build a project using variables and loops in Scratch or Python.' },
-        { range:'Wk 7-8', title:'Conditions and events', description:'If-else decisions. Events and triggers. Build a simple interactive game.' }
-      ], resources:['Scratch','Python Turtle graphics','Khan Academy — Intro to JS'] },
-      { month:'Month 3', theme:'problem solving', weeks:[
-        { range:'Wk 9-10', title:'Decomposition', description:'Breaking big problems into smaller ones. Plan a project by decomposing it into parts, then build each part.' },
-        { range:'Wk 11-12', title:'Debugging and testing', description:'What is a bug? Systematic debugging: read the error, identify the line, fix and test. Build something and deliberately break it.' }
-      ], resources:['repl.it — browser IDE','Python for Kids (book)'] },
-      { month:'Month 4', theme:'data and patterns', weeks:[
-        { range:'Wk 13-14', title:'Lists and collections', description:'Storing multiple items. Loops over lists. Build a quiz that stores questions and answers in lists.' },
-        { range:'Wk 15-16', title:'Mini project', description:'Design and build a small Python or Scratch project that uses everything learned: variables, loops, conditions, lists.' }
-      ], resources:['Project Euler first 5 problems','freeCodeCamp'] },
-    ],
-  };
-
-  const defaultCS = [
-    { month:'June', theme:'how computers actually work', weeks:[
-      { range:'Wk 1-2', title:'Binary and data representation', description:'Number systems from first principles. Convert decimal ↔ binary ↔ hex manually. Implement a converter in Python without built-in functions.' },
-      { range:'Wk 3-4', title:'Logic gates and Boolean algebra', description:'AND, OR, NOT understood as transistors. Build truth tables. De Morgan laws. Show how a half-adder is built from logic gates.' }
-    ], resources:['CS50 Week 0 — Harvard (free)','Ben Eater on YouTube','nand2tetris.org'] },
-    { month:'July', theme:'algorithms: solving problems efficiently', weeks:[
-      { range:'Wk 5-6', title:'Sorting algorithms', description:'Implement bubble, selection, insertion sort from scratch. Trace on paper first. Count comparisons and swaps.' },
-      { range:'Wk 7-8', title:'Searching and Big-O', description:'Linear vs binary search. Time both on 100/1000/10000 elements. Big-O: O(n) vs O(log n).' }
-    ], resources:['"Grokking Algorithms" Ch 1-4','Visualgo.net'] },
-    { month:'August', theme:'data structures', weeks:[
-      { range:'Wk 9-10', title:'Arrays, stacks, queues', description:'Why is array access O(1) but insertion O(n)? Implement a stack and queue from scratch.' },
-      { range:'Wk 11-12', title:'Hash tables and trees', description:'How does Python dict achieve O(1) lookup? Implement a simple BST.' }
-    ], resources:['"Grokking Algorithms" Ch 5+7','pythontutor.com'] },
-    { month:'September', theme:'recursion and dynamic programming', weeks:[
-      { range:'Wk 13-14', title:'Recursion and the call stack', description:'What happens in memory when a function calls itself? Implement factorial and Fibonacci recursively.' },
-      { range:'Wk 15-16', title:'Dynamic programming', description:'Memoization: add caching to Fibonacci. Measure performance for n=40. Solve Project Euler problems.' }
-    ], resources:['CS50 Week 4','"Grokking Algorithms" Ch 9','projecteuler.net'] },
-  ];
-
-  // Grade-appropriate projects
-  const projectSets = {
-    5: [
-      { month:'Month 1', title:'My digital story', subjects:['English','CS'], description:'Write a short illustrated digital story using Google Slides or Canva. Each slide is a scene — write the text, then illustrate it with drawings or images.', steps:['Plan your story: character, setting, problem, solution (4 slides minimum).','Write the text for each slide.','Add illustrations — draw by hand and photograph, or use digital tools.','Share with one family member and ask for feedback. Make one improvement.'], deliverable:'Illustrated digital story (4+ slides)' },
-      { month:'Month 2', title:'Nature survey', subjects:['Science','Mathematics'], description:'Survey living things in your garden, school, or local park. Count, classify, and present your data.', steps:['Choose a site and decide what to count (plants, insects, birds, etc.).','Visit 3 times and record counts each time.','Calculate averages. Create a bar chart of your results.','Write 3 sentences: what did you find, what surprised you, what would you do differently?'], deliverable:'Data table + bar chart + written summary' },
-      { month:'Month 3', title:'How does it work?', subjects:['Science','English'], description:'Choose one everyday machine or technology (a bicycle, a microwave, a speaker). Research how it works and explain it clearly.', steps:['Research: how does it work? Find two reliable sources.','Draw a labelled diagram.','Write a 200-word explanation in your own words.','Read it to someone and check: can they understand it from your explanation alone?'], deliverable:'Labelled diagram + 200-word explanation' },
-      { month:'Month 4', title:'Mini coding project', subjects:['CS'], description:'Build a simple interactive program in Python or Scratch that solves a small problem or entertains someone.', steps:['Decide what your program will do. Write a one-sentence description.','Build version 1 — basic functionality only.','Test it with someone. Write down 2 things to improve.','Build version 2 with improvements. Show it to your family.'], deliverable:'Working program + brief description of what it does and how' },
-    ],
-  };
-
-  const defaultProjects = [
-    { month:'June', title:'Cross-subject investigation', subjects:['Science','Mathematics'], description:'Choose a question that connects science and mathematics. Design a simple experiment, collect data, and analyse the results.', steps:['Choose a question and write a hypothesis.','Design a simple experiment. Run it at least 3 times.','Record data in a table. Calculate averages. Create a graph.','Write a conclusion: does the data support your hypothesis?'], deliverable:'Lab report with data table, graph, and conclusion' },
-    { month:'July', title:'Deep dive research project', subjects:['English','History/Humanities'], description:'Choose a topic from your current curriculum. Research it deeply, go beyond the textbook, and write up your findings.', steps:['Choose a specific angle on a topic you\'\2e currently studying.','Find at least 2 sources beyond your textbook. Take notes.','Write a 400-word report with an introduction, body, and conclusion.','Reflect: what did you learn that surprised you?'], deliverable:'400-word research report' },
-    { month:'August', title:'Creative coding project', subjects:['CS','Mathematics'], description:'Build a program that solves a real problem or explores a mathematical concept you\'\2e been studying.', steps:['Define the problem your program will solve.','Plan the logic on paper before coding.','Implement and test. Fix at least one bug.','Document: write 3 sentences explaining how it works and what you\'\2 improve.'], deliverable:'Working program + brief documentation' },
-    { month:'September', title:'Personal creative project', subjects:['English'], description:'Write a substantial piece of creative writing connected to a historical or scientific topic you\'\2e studied this term.', steps:['Choose a topic from your learning this term and a creative angle.','Plan: characters, setting, narrative arc.','Write a complete first draft without stopping to perfect.','Revise once. Add an author\'\2 note explaining connections to real content.'], deliverable:"Creative writing piece + author\'\2 note" },
-  ];
-
-  return {
-    summary: `Welcome, ${name}! Your plan is built for ${grade||'middle school'} Cambridge curriculum. ${prefs.focus?.length ? `Priority subjects: ${prefs.focus.join(', ')}.` : 'All core subjects are covered.'} ${prefs.coaching ? `Coaching already in place for: ${prefs.coaching} — those are excluded.` : ''}`,
-    days,
-    csRoadmap: (g <= 5) ? csRoadmaps[5] : defaultCS,
-    projects: (g <= 5) ? projectSets[5] : defaultProjects,
-  };
+  USER = USER || {};
+  USER.plan = plan;
+  S.set('mz', USER);
+  return plan;
 }
-
-
 
 /* ── Onboarding ────────────────────────────────────────── */
-let obData = { grade:'Grade 8', hours:'1 hour', days:[], focus:[], style:'', coaching:'', roadmapSubjects:[] };
+let obData = { grade:'Grade 8', hours:'1 hour', days:[], focus:[], style:'', coaching:'', roadmapSubject:'' };
 let obReportFile = null, obSyllabusFile = null, obExistingFile = null;
 let obHasExisting = false;
 let obCurrentStep = 1;
@@ -342,6 +364,27 @@ const OB_TOTAL = 12;
 
 function obProgress(step) {
   document.getElementById('ob-progress-fill').style.width = `${((step-1)/(OB_TOTAL-1))*100}%`;
+}
+
+/* Every forward move is recorded, so back always retraces the real route
+   rather than a hardcoded step order that forks (3a vs 3b) can break. */
+let obHistory = [];
+
+function obBack() {
+  const prev = obHistory.pop();
+  if (!prev) return;
+  const el = document.getElementById(prev);
+  if (!el) return;
+  document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  obCurrentStep = parseInt(prev.replace('ob-s', '')) || obCurrentStep;
+  obProgress(obCurrentStep);
+  renderObBack();
+}
+
+function renderObBack() {
+  const btn = document.getElementById('ob-back');
+  if (btn) btn.style.display = obHistory.length ? 'flex' : 'none';
 }
 
 function obGo(id) {
@@ -353,10 +396,13 @@ function obGo(id) {
     notify('Something went wrong moving to the next step. Please report this.', 'warn');
     return;
   }
+  const current = document.querySelector('.ob-step.active');
+  if (current && current.id !== id) obHistory.push(current.id);
   document.querySelectorAll('.ob-step').forEach(s => s.classList.remove('active'));
   el.classList.add('active');
   obCurrentStep = parseInt(id.replace('ob-s', '')) || obCurrentStep;
   obProgress(obCurrentStep);
+  renderObBack();
 }
 
 function obChipSingle(wrapperId, onPick) {
@@ -384,6 +430,9 @@ function obSelectedMulti(wrapperId) {
 }
 
 function initOnboarding() {
+  document.getElementById('ob-back').addEventListener('click', obBack);
+  renderObBack();
+
   // Step 1: name
   const nameIn = document.getElementById('ob-name');
   document.getElementById('ob-n1').addEventListener('click', () => {
@@ -452,16 +501,15 @@ function initOnboarding() {
     obCurrentStep = 8; obGo('ob-s8');
   });
 
-  // Step 8: roadmap opt-in
-  document.querySelectorAll('#ob-roadmap-chips .ob-chip').forEach(c => {
-    c.addEventListener('click', () => c.classList.toggle('sel'));
-  });
+  // Step 8: roadmap opt-in — one subject only
+  obChipSingle('ob-roadmap-chips');
   document.getElementById('ob-n8').addEventListener('click', () => {
-    obData.roadmapSubjects = [...document.querySelectorAll('#ob-roadmap-chips .ob-chip.sel')].map(c => c.dataset.val);
+    const custom = document.getElementById('ob-roadmap-custom').value.trim();
+    obData.roadmapSubject = custom || obSelectedSingle('ob-roadmap-chips') || '';
     obCurrentStep = 9; obGo('ob-s9c');
   });
   document.getElementById('ob-skip8r').addEventListener('click', () => {
-    obData.roadmapSubjects = [];
+    obData.roadmapSubject = '';
     obCurrentStep = 9; obGo('ob-s9c');
   });
 
@@ -524,14 +572,17 @@ async function kickoffGeneration(skipAI = false) {
     focus: obData.focus,
     style: obData.style,
     coaching: obData.coaching,
-    roadmapSubjects: obData.roadmapSubjects || [],
+    roadmapSubject: obData.roadmapSubject || '',
   };
 
   applyTheme('light');
   obCurrentStep = 12;
+  obHistory = [];
+  const backBtn = document.getElementById('ob-back');
+  if (backBtn) backBtn.style.display = 'none';
   obGo('ob-s12r');
 
-  const STEPS = ['reading documents','analysing your data','generating your plan','building cs roadmap','finishing up'];
+  const STEPS = ['reading documents','analysing your data','generating your plan','building your roadmap','finishing up'];
   genStep(STEPS, 0);
 
   let existingText = '', reportText = '', syllabusText = '';
@@ -578,24 +629,71 @@ async function kickoffGeneration(skipAI = false) {
     genStep(STEPS, 4);
   }
 
-  const usedFallback = !plan;
-  if (!plan) plan = defaultPlan({ name });
+  if (!plan) {
+    // No fallback plan. Handing over a generic curriculum here would look
+    // like success while being nobody's actual schedule.
+    showGenFailure(problems, skipAI || !apiKey);
+    return;
+  }
 
   USER.plan = plan;
   USER.reportText = reportText;
   USER.syllabusText = syllabusText;
   S.set('mz', USER);
 
-  document.getElementById('ob-gen-h').textContent = usedFallback ? 'ready — with a default plan' : 'all done!';
+  document.getElementById('ob-gen-h').textContent = 'all done!';
   document.getElementById('ob-gen-sub').textContent = '';
   genStep(STEPS, 5);
   await new Promise(r => setTimeout(r, 600));
   launchApp();
 
-  if (usedFallback && !skipAI && apiKey) {
-    notify('Could not build a personalised plan, so the default schedule is loaded. Try regenerating from settings.', 'warn', 0);
-  }
   problems.forEach(p => notify(p, 'warn', 0));
+}
+
+/* Generation failed. Offer the two real ways forward. */
+function showGenFailure(problems, noKey) {
+  const h = document.getElementById('ob-gen-h');
+  const sub = document.getElementById('ob-gen-sub');
+  const wrap = document.querySelector('#ob-s12r .ob-generating');
+  h.textContent = noKey ? 'a plan needs an API key' : "couldn't build your plan";
+  sub.textContent = problems.length ? problems[0] : 'The model did not return a usable plan.';
+
+  const spinner = document.querySelector('#ob-s12r .ob-spinner');
+  if (spinner) spinner.style.display = 'none';
+
+  const box = document.createElement('div');
+  box.className = 'gen-fail';
+  box.innerHTML = `
+    <div class="rec-actions">
+      <button class="ob-btn-primary" id="gen-retry">try again</button>
+      <button class="ob-btn-ghost" id="gen-import">import a plan file instead</button>
+    </div>
+    <p class="settings-hint">Import accepts a Meridian backup (.json) or a photo of a schedule.</p>
+    <input type="file" id="gen-file" accept="application/json,.json,image/*" style="display:none"/>`;
+  wrap?.appendChild(box);
+
+  document.getElementById('gen-retry').addEventListener('click', () => {
+    box.remove();
+    if (spinner) spinner.style.display = '';
+    kickoffGeneration();
+  });
+  document.getElementById('gen-import').addEventListener('click', () => document.getElementById('gen-file').click());
+  document.getElementById('gen-file').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    h.textContent = 'reading your plan…';
+    try {
+      await importAnyPlan(f, {
+        name: USER.name, grade: USER.grade, hours: USER.hours, days: USER.days,
+        focus: USER.focus, style: USER.style, coaching: USER.coaching, roadmapSubject: USER.roadmapSubject,
+      });
+      box.remove();
+      launchApp();
+    } catch (err) {
+      h.textContent = "couldn't build your plan";
+      sub.textContent = err.message;
+    }
+  });
 }
 
 /* ── App ───────────────────────────────────────────────── */
@@ -604,23 +702,44 @@ function launchApp() {
   document.getElementById('app').style.display = 'grid';
   applyTheme(USER.theme || 'light');
   document.getElementById('sidebar-greeting').textContent = `hey, ${USER.name.toLowerCase()}`;
-  initTabs();
-  initOverview();
-  initReview();
-  initReviewControls();
-  initSession();
-  initPlan();
-  renderSessionLog();
-  const hasRoadmap = USER.roadmapSubjects?.length > 0;
+  // Each step is isolated. Settings must survive whatever else fails —
+  // it is the only route to regenerate, import or reset.
+  const step = (label, fn) => {
+    try { fn(); }
+    catch (e) { console.error(`launchApp: ${label} failed`, e); failed.push(label); }
+  };
+  const failed = [];
+
+  step('settings', initSettings);
+  step('tabs', initTabs);
+  step('session', initSession);
+  step('plan', initPlan);
+  step('overview', initOverview);
+  step('review', () => { initReview(); initReviewControls(); });
+  step('log', renderSessionLog);
+
+  const hasRoadmap = (USER.plan?.roadmap?.length || 0) > 0;
+  const subject = USER.plan?.roadmapSubject || 'roadmap';
   const csNav = document.querySelector('[data-tab="cs"]');
   const csMob = document.querySelector('.mob-nav[data-tab="cs"]');
-  if (!hasRoadmap) { if(csNav)csNav.style.display='none'; if(csMob)csMob.style.display='none'; }
-  else initCS();
-  initProjects();
-  initSettings();
-  renderStreak();
-  initCountdown();
-  if(!S.get('mz-tour-done'))setTimeout(startTour,600);
+  if (!hasRoadmap) {
+    if(csNav)csNav.style.display='none';
+    if(csMob)csMob.style.display='none';
+  } else {
+    if(csNav){ csNav.style.display=''; const lbl=csNav.querySelector('span'); if(lbl)lbl.textContent=subject.toLowerCase(); }
+    if(csMob){ csMob.style.display=''; csMob.textContent=subject.toLowerCase(); }
+    step('roadmap', initCS);
+  }
+
+  step('projects', initProjects);
+  step('streak', renderStreak);
+  step('countdown', initCountdown);
+
+  if (failed.length) {
+    notify(`Some parts of the app could not load (${failed.join(', ')}). Open settings to regenerate or restore a backup.`, 'warn', 0);
+  } else if (!S.get('mz-tour-done')) {
+    setTimeout(startTour, 600);
+  }
 }
 
 function applyTheme(t) {
@@ -834,9 +953,9 @@ function initChecklist(dow, day) {
     item.dataset.i=i;
     if(nextExam(t._subj)&&daysUntil(nextExam(t._subj).date)<=EXAM_WINDOW) item.classList.add('exam-focus');
     const pill=t.mins?`<span class="task-pill">${t.mins}m</span>`:'';
-    const ai=t.generateContent?`<span class="task-ai">✦</span>`:'';
+    const ai=t.generateContent?`<span class="task-ai" title="has study content"></span>`:'';
     item.innerHTML=`<input type="checkbox"${done?' checked':''}/>
-      <span class="task-text">${t.text}${pill}${ai}</span>
+      <span class="task-text">${esc(t.text)}${pill}${ai}</span>
       <button class="task-arrow">›</button>`;
 
     item.querySelector('input').addEventListener('change',e=>{
@@ -945,23 +1064,64 @@ Format with ---HEADING--- sections. 3-4 sections. Relevant to task.
 Use spoiler format for answers: ---ANSWERS--- or ---MARK SCHEME---
 150-250 words total. Specific and actionable.`;
   try{
-    const r=await groq([{role:'system',content:'Generate structured educational content. Format exactly with ---HEADING--- sections. No preamble.'},{role:'user',content:prompt}],500);
+    const r=await groq([{role:'system',content:'You generate compact study content. Split your answer into 2-4 sections. Start each section with its own descriptive title wrapped in three dashes, like ---Core idea--- or ---Practice--- or ---Answers---. Use the actual topic as the title; never write the word HEADING. Keep each section under 90 words. Use markdown for emphasis and lists. No preamble, no closing remarks.'},{role:'user',content:prompt}],420);
     el.innerHTML=parseGen(r);
   }catch(e){
     el.innerHTML=`<span style="font-size:0.72rem;color:var(--tx-3)">${esc(e.message)}</span>`;
   }
 }
 
+/* Minimal markdown → HTML. Escapes first, so model output can never
+   inject elements; only the tags produced below can appear. */
+function mdToHtml(src) {
+  const lines = esc(src).split('\n');
+  let html = '', list = null;
+
+  const inline = t => t
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*(?!\s)(.+?)(?<!\s)\*/g, '$1<em>$2</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
+
+  for (let raw of lines) {
+    const line = raw.trim();
+    if (!line) { closeList(); continue; }
+
+    const ol = line.match(/^(\d+)[.)]\s+(.*)$/);
+    const ul = line.match(/^[-*•]\s+(.*)$/);
+    const hd = line.match(/^(#{1,4})\s+(.*)$/);
+
+    if (hd) { closeList(); html += `<h4 class="gen-h">${inline(hd[2])}</h4>`; continue; }
+    if (ol) {
+      if (list !== 'ol') { closeList(); html += '<ol class="gen-list">'; list = 'ol'; }
+      html += `<li>${inline(ol[2])}</li>`; continue;
+    }
+    if (ul) {
+      if (list !== 'ul') { closeList(); html += '<ul class="gen-list">'; list = 'ul'; }
+      html += `<li>${inline(ul[1])}</li>`; continue;
+    }
+    closeList();
+    html += `<p>${inline(line)}</p>`;
+  }
+  closeList();
+  return html;
+}
+
 function parseGen(raw) {
-  const parts=raw.split(/---([^-\n]+)---/).filter(s=>s.trim());
-  if(parts.length<2)return`<div class="gen-block"><div class="gen-body">${raw}</div></div>`;
-  let html='';
-  for(let i=0;i<parts.length-1;i+=2){
-    const h=parts[i].trim(),b=parts[i+1].trim().replace(/\n/g,'<br>');
-    const spoiler=/ANSWER|MARK SCHEME/i.test(h);
-    html+=spoiler
-      ?`<details class="gen-block"><summary>${h} <span style="font-size:0.6rem;color:var(--tx-3)">(reveal)</span></summary><div class="gen-body">${b}</div></details>`
-      :`<div class="gen-block"><div class="gen-heading">${h}</div><div class="gen-body">${b}</div></div>`;
+  const parts = raw.split(/---+\s*([^-\n]+?)\s*---+/).filter(s => s.trim());
+  if (parts.length < 2) return `<div class="gen-block"><div class="gen-body">${mdToHtml(raw)}</div></div>`;
+
+  let html = '';
+  for (let i = 0; i < parts.length - 1; i += 2) {
+    const heading = parts[i].trim().replace(/^\*+|\*+$/g, '');
+    const body = mdToHtml(parts[i + 1].trim());
+    const spoiler = /ANSWER|MARK SCHEME|SOLUTION/i.test(heading);
+    // Everything is collapsible; only the first section starts open, so a
+    // long answer doesn't bury the rest of the panel.
+    const open = !spoiler && i === 0 ? ' open' : '';
+    html += `<details class="gen-block"${open}><summary>${esc(heading.toLowerCase())}</summary><div class="gen-body">${body}</div></details>`;
   }
   return html;
 }
@@ -1083,7 +1243,7 @@ function initPlan(){
   const dayKeys=Object.keys(plan.days);
 
   const tabsEl=document.getElementById('day-tabs');
-  tabsEl.innerHTML=dayKeys.map(k=>`<button class="day-tab${k==activeDow?' active':''}" data-day="${k}">${plan.days[k].name.slice(0,3).toLowerCase()}</button>`).join('');
+  tabsEl.innerHTML=dayKeys.map(k=>`<button class="day-tab${k==activeDow?' active':''}" data-day="${k}">${esc(plan.days[k].name.slice(0,3).toLowerCase())}</button>`).join('');
 
   function renderDay(k){
     const day=plan.days[k];
@@ -1312,6 +1472,56 @@ function examsSoon() {
   return upcomingExams().filter(e => daysUntil(e.date) <= EXAM_WINDOW);
 }
 
+/** Read an exam timetable out of a photo/screenshot and merge it in. */
+async function importExamsFromFile(file) {
+  if (looksLikeBackup(file)) {
+    const parsed = JSON.parse(await file.text());
+    const list = Array.isArray(parsed) ? parsed : parsed?.data?.['mz-exams'] ? JSON.parse(parsed.data['mz-exams']) : null;
+    if (!Array.isArray(list)) throw new Error('No exam list found in that file.');
+    return mergeExams(list);
+  }
+
+  const text = await extractDoc(file, 'existing');
+  const year = new Date().getFullYear();
+  const reply = await groq([
+    { role: 'system', content: 'You extract exam timetables. Return JSON only, no markdown, no commentary.' },
+    { role: 'user', content: `From this timetable, list every exam with its subject and date.
+Return exactly: {"exams":[{"subject":"Physics","date":"${year}-09-14","syllabus":"topics listed for this paper, or empty string"}]}
+Dates must be YYYY-MM-DD. If a year is not written, assume ${year}. Include the syllabus/topic list for a paper if one is shown. Skip anything that is not an exam.
+
+TIMETABLE:
+${text}` }
+  ], 900);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(reply.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim());
+  } catch {
+    throw new Error('Could not read an exam timetable out of that file.');
+  }
+
+  const found = (Array.isArray(parsed?.exams) ? parsed.exams : [])
+    .filter(e => e && asText(e.subject) && /^\d{4}-\d{2}-\d{2}$/.test(asText(e.date)))
+    .map(e => ({ subject: asText(e.subject), date: asText(e.date), syllabus: asText(e.syllabus) }));
+
+  if (!found.length) throw new Error('No exams with readable dates were found in that file.');
+  return mergeExams(found);
+}
+
+/** Add exams without creating duplicates. Returns how many were new. */
+function mergeExams(incoming) {
+  const list = getExams();
+  let added = 0;
+  incoming.forEach(e => {
+    const dupe = list.find(x => x.subject.toLowerCase() === e.subject.toLowerCase() && x.date === e.date);
+    if (dupe) { if (e.syllabus && !dupe.syllabus) dupe.syllabus = e.syllabus; return; }
+    list.push(e);
+    added++;
+  });
+  saveExams(list);
+  return added;
+}
+
 /* ── Backup ────────────────────────────────────────────── */
 
 function exportData() {
@@ -1481,7 +1691,7 @@ function initOverview() {
   const grades = Array.isArray(USER.plan.grades) ? USER.plan.grades : [];
   const focus = (USER.focus || []).map(f => f.toLowerCase());
   const term = termProgress();
-  const roadmap = USER.plan.csRoadmap || [];
+  const roadmap = USER.plan.roadmap || [];
 
   const cards = [];
 
@@ -1554,7 +1764,7 @@ function initOverview() {
   if (roadmap.length) {
     cards.push(`
       <div class="ov-card">
-        <span class="eyebrow">cs roadmap</span>
+        <span class="eyebrow">${esc((USER.plan.roadmapSubject||"roadmap").toLowerCase())} roadmap</span>
         <div class="ov-stat">${roadmap.length}</div>
         <div class="ov-stat-lbl">months · ${roadmap.reduce((n,m)=>n+(m.weeks?.length||0),0)} weeks</div>
         <div style="display:flex;flex-direction:column;gap:0.3rem;margin-top:0.25rem">
@@ -1627,13 +1837,13 @@ function initOverview() {
 /* ── CS tab ────────────────────────────────────────────── */
 function initCS(){
   const el=document.getElementById('cs-content');
-  el.innerHTML=(USER.plan.csRoadmap||[]).map(m=>`
+  el.innerHTML=(USER.plan.roadmap||[]).map(m=>`
     <div class="cs-card">
       <div class="cs-card-head"><span class="cs-month">${m.month}</span><span class="cs-theme">${m.theme}</span></div>
       <div class="cs-weeks">${(m.weeks||[]).map(w=>`
         <div class="cs-week">
           <div class="cs-wk-num">${w.range}</div>
-          <div><h4>${w.title}</h4><p>${w.description}</p></div>
+          <div><h4>${esc(w.title)}</h4><p>${esc(w.description)}</p></div>
         </div>`).join('')}
       </div>
       ${m.resources?.length?`<div class="cs-resources">${m.resources.map(r=>`<div class="cs-res">${r}</div>`).join('')}</div>`:''}
@@ -1804,7 +2014,7 @@ function openProjectDetail(idx,projects,centerIdx,layout,onComplete){
 
   if(state==='locked'){
     const prereq=projects[node.parentIdx];
-    content.innerHTML=`<div class="project-detail-locked"><div class="lock-icon">🔒</div><div class="lock-title">${p.title}</div><div class="lock-sub">complete <strong>${prereq?.title||'the previous project'}</strong> to unlock this branch</div></div>`;
+    content.innerHTML=`<div class="project-detail-locked"><div class="lock-icon">🔒</div><div class="lock-title">${esc(p.title)}</div><div class="lock-sub">complete <strong>${esc(prereq?.title||'the previous project')}</strong> to unlock this branch</div></div>`;
     return;
   }
 
@@ -1812,10 +2022,10 @@ function openProjectDetail(idx,projects,centerIdx,layout,onComplete){
   content.innerHTML=`
     <div class="project-detail-node-header">
       <div class="project-detail-month">${p.month} · ${(p.subjects||[]).join(' + ')}</div>
-      <h3 class="project-detail-title">${p.title}</h3>
+      <h3 class="project-detail-title">${esc(p.title)}</h3>
       <div class="project-detail-tags">${(p.subjects||[]).map(s=>`<span class="subj-chip" style="background:${sc(s)};color:#333">${s}</span>`).join('')}</div>
     </div>
-    <p class="project-detail-desc">${p.description}</p>
+    <p class="project-detail-desc">${esc(p.description)}</p>
     <ol class="project-detail-steps">${(p.steps||[]).map(s=>`<li>${s}</li>`).join('')}</ol>
     <div class="project-detail-deliverable"><strong>deliverable:</strong> ${p.deliverable}</div>
     <button class="project-complete-btn ${isDone?'done':''}" id="proj-btn">${isDone?'✓ completed':'mark as complete'}</button>
@@ -1839,7 +2049,7 @@ const TOUR=[
   {sel:'.music-panel',title:'ambient sound',desc:'brown noise, rain, or binaural focus tones. plays while you study.',pos:'right'},
   {sel:'[data-tab="plan"]',title:'my plan',desc:'your full week day by day. ai-generated from your documents.',pos:'right'},
   {sel:'[data-tab="projects"]',title:'project tree',desc:'a visual skill tree. complete projects to unlock new branches.',pos:'right'},
-  {sel:'[data-tab="cs"]',title:'cs roadmap',desc:'16-week self-study curriculum. algorithms, data structures, recursion.',pos:'right'},
+  {sel:'[data-tab="cs"]',title:'your roadmap',desc:'a 16-week deep dive into the subject you picked, built just for you.',pos:'right'},
   {sel:'.sidebar-settings-btn',title:'settings',desc:'theme, api key, preferences, regenerate plan anytime.',pos:'right'},
 ];
 let tourIdx=0;
@@ -1978,6 +2188,37 @@ function initSettings(){
     refreshAfterDataChange();
   });
 
+  document.getElementById('s-exam-import').addEventListener('click',()=>document.getElementById('s-exam-file').click());
+  document.getElementById('s-exam-file').addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value='';
+    if(!f)return;
+    const btn=document.getElementById('s-exam-import');
+    btn.disabled=true; btn.textContent='reading…';
+    try{
+      const n=await importExamsFromFile(f);
+      notify(n?`Added ${plural(n,'exam')}.`:'No new exams — they were already on the list.','ok',5000);
+      renderExamList(); refreshAfterDataChange();
+    }catch(err){ notify(`Could not import exams: ${err.message}`,'warn'); }
+    btn.disabled=false; btn.textContent='import timetable from a file';
+  });
+
+  document.getElementById('s-import-plan').addEventListener('click',()=>document.getElementById('s-plan-file').click());
+  document.getElementById('s-plan-file').addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value='';
+    if(!f)return;
+    if(!confirm('Importing will replace your current plan. Continue?'))return;
+    const btn=document.getElementById('s-import-plan');
+    btn.disabled=true; btn.textContent='importing…';
+    try{
+      await importAnyPlan(f);
+      notify('Plan imported.','ok',4000);
+      location.reload();
+    }catch(err){
+      notify(`Could not import plan: ${err.message}`,'warn');
+      btn.disabled=false; btn.textContent='import a plan';
+    }
+  });
+
   document.getElementById('s-export').addEventListener('click',()=>{
     try{ exportData(); notify('Backup downloaded.','ok',4000); }
     catch(e){ notify(`Export failed: ${e.message}`,'warn'); }
@@ -2055,13 +2296,77 @@ async function showReward(day){
 /* ── Boot ──────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded',()=>{
   const saved=S.get('mz');
+
   if(saved?.plan){
     USER=saved;
     applyTheme(USER.theme||'light');
+
+    // A plan saved in a broken shape used to crash the boot and leave no
+    // way to reach settings. Catch it here and offer a way out instead.
+    try {
+      USER.plan = validatePlan(USER.plan);
+    } catch(e) {
+      console.error('Stored plan is unusable', e);
+      showRecovery(e.message);
+      return;
+    }
     launchApp();
-  } else {
-    document.getElementById('onboarding').style.display='flex';
-    applyTheme('light');
-    initOnboarding();
+    return;
   }
+
+  document.getElementById('onboarding').style.display='flex';
+  applyTheme('light');
+  initOnboarding();
 });
+
+/* ── Recovery ──────────────────────────────────────────── */
+/* Shown when the saved plan cannot be rendered. Deliberately standalone:
+   it must work even if nothing else in the app has initialised. */
+function showRecovery(reason){
+  const ob=document.getElementById('onboarding');
+  const app=document.getElementById('app');
+  if(app)app.style.display='none';
+  if(!ob)return;
+  ob.style.display='flex';
+  ob.innerHTML=`
+    <div class="ob-card">
+      <div class="ob-step active">
+        <p class="ob-eyebrow">something went wrong</p>
+        <h2 class="ob-h">your saved plan can't be opened</h2>
+        <p class="ob-sub">${esc(reason)} Your streak, sessions and review history are all still here — only the plan itself is damaged.</p>
+        <div class="rec-actions">
+          <button class="ob-btn-primary" id="rec-regen">regenerate my plan</button>
+          <button class="ob-btn-ghost" id="rec-import">import a plan file</button>
+          <button class="ob-btn-ghost" id="rec-export">export a backup first</button>
+        </div>
+        <input type="file" id="rec-file" accept="application/json,.json,image/*" style="display:none"/>
+      </div>
+    </div>`;
+
+  document.getElementById('rec-export').addEventListener('click',()=>{
+    try{ exportData(); }catch(e){ alert('Export failed: '+e.message); }
+  });
+  document.getElementById('rec-import').addEventListener('click',()=>document.getElementById('rec-file').click());
+  document.getElementById('rec-file').addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value='';
+    if(!f)return;
+    try{
+      await importAnyPlan(f);
+      location.reload();
+    }catch(err){ alert('Could not import: '+err.message); }
+  });
+  document.getElementById('rec-regen').addEventListener('click',async()=>{
+    const btn=document.getElementById('rec-regen');
+    btn.disabled=true; btn.textContent='generating…';
+    try{
+      const plan=await generatePlan(
+        {name:USER.name,grade:USER.grade,hours:USER.hours,days:USER.days,focus:USER.focus,style:USER.style,coaching:USER.coaching,roadmapSubject:USER.roadmapSubject},
+        USER.reportText||'',USER.syllabusText||'','');
+      USER.plan=plan; S.set('mz',USER);
+      location.reload();
+    }catch(err){
+      btn.disabled=false; btn.textContent='regenerate my plan';
+      alert('Could not regenerate: '+err.message);
+    }
+  });
+}

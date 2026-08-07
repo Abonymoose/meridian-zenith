@@ -116,5 +116,34 @@ console.log('--- dead end sweep ---');
   ck('no button is a no-op', dead.length?dead.join(', '):'none','none');
 }
 
+
+/* ── back navigation ── */
+console.log('--- back button ---');
+{
+  const {d}=boot();
+  d.getElementById('ob-name').value='P';
+  ck('back hidden at start', d.getElementById('ob-back').style.display, 'none');
+  click(d,'ob-n1');
+  ck('back appears after step 1', d.getElementById('ob-back').style.display!=='none', true);
+  click(d,'ob-fork-no');
+  ck('now on grade', active(d), 'ob-s3b');
+  click(d,'ob-back');
+  ck('back -> fork', active(d), 'ob-s2');
+  click(d,'ob-back');
+  ck('back -> name', active(d), 'ob-s1');
+  ck('back hidden again', d.getElementById('ob-back').style.display, 'none');
+}
+{
+  // back must retrace the fork actually taken, not a fixed order
+  const {d}=boot();
+  d.getElementById('ob-name').value='P';
+  click(d,'ob-n1'); click(d,'ob-fork-yes');
+  ck('on upload screen', active(d), 'ob-s3a');
+  click(d,'ob-n3a');
+  ck('jumped to api key', active(d), 'ob-s11r');
+  click(d,'ob-back');
+  ck('back retraces fork', active(d), 'ob-s3a');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

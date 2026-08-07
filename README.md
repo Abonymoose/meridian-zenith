@@ -52,12 +52,28 @@ Ease starts at 2.5 and never falls below 1.3. If the subject has an exam coming 
 
 Everything is in localStorage under `mz*` keys — profile, streak, sessions, reviews, exams, per-day task state. There is no server, so clearing browsing data erases it. Settings → backup → export writes the lot to a JSON file.
 
+## No default plan
+
+There is no fallback curriculum. If generation fails you get a retry button and an import option — the app never hands over a generic schedule dressed up as yours.
+
+Plans are validated before they are saved and again at boot. A plan the renderers can't handle triggers a recovery screen offering regenerate, import, or export-a-backup — it can no longer crash the app into an unbootable state.
+
+## Import
+
+| Source | What happens |
+| --- | --- |
+| Meridian backup (.json) | restored directly |
+| Photo of a schedule | read by the vision model, turned into a plan |
+| Photo of an exam timetable | subjects, dates and per-paper syllabus extracted into exam mode |
+
 ## Tests
 
 ```bash
 node test-features.js   # sessions, spaced repetition, exams, backup
 node test-overview.js   # overview rendering
-node test-onboarding.js # walks every onboarding path, fails on any dead end
+node test-onboarding.js  # walks every onboarding path, fails on any dead end
+node test-resilience.js  # malformed AI plans must never brick the app
+node test-markdown.js    # AI content rendering and escaping
 ```
 
 ## Stack
