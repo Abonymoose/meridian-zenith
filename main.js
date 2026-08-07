@@ -13,24 +13,79 @@ let USER = null;
 let currentTask = null;
 let chatHistory = [];
 
-/* ── Groq ──────────────────────────────────────────────── */
-const MODEL = 'llama-3.1-8b-instant';
+/* ── Notices ───────────────────────────────────────────── */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
-async function groq(messages, max = 600) {
-  if (!USER?.apiKey) return null;
+function notify(msg, kind = 'warn', ms = 9000) {
+  let stack = document.getElementById('mz-notices');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'mz-notices';
+    document.body.appendChild(stack);
+  }
+  const n = document.createElement('div');
+  n.className = `mz-notice ${kind}`;
+  n.innerHTML = `<span>${esc(msg)}</span><button aria-label="Dismiss">×</button>`;
+  const kill = () => { n.classList.add('out'); setTimeout(() => n.remove(), 250); };
+  n.querySelector('button').addEventListener('click', kill);
+  stack.appendChild(n);
+  if (ms) setTimeout(kill, ms);
+}
+
+/* ── Groq ──────────────────────────────────────────────── */
+/* Model IDs get retired. Check https://console.groq.com/docs/deprecations
+   before assuming a failure is your own fault.
+     llama-3.1-8b-instant                        shut down 16 Aug 2026
+     meta-llama/llama-4-scout-17b-16e-instruct   shut down 17 Jul 2026 */
+const MODEL = 'openai/gpt-oss-20b';        // text
+const VISION_MODEL = 'qwen/qwen3.6-27b';   // images — gpt-oss is text-only
+
+class ApiError extends Error {}
+
+function apiReason(status, body) {
+  const detail = body?.error?.message || '';
+  if (status === 401 || status === 403) return 'Groq rejected the API key. Check it in settings.';
+  if (status === 429) return 'Rate limit reached. Wait a minute, then try again.';
+  if (status === 413) return 'That file is too large for the model to read.';
+  if (/decommissioned|deprecat|does not exist|not found/i.test(detail) || status === 404) {
+    return 'This model is no longer available on Groq — the app needs its model IDs updated.';
+  }
+  if (status >= 500) return 'Groq is having problems right now. Try again shortly.';
+  return detail || `Groq returned an error (${status}).`;
+}
+
+async function groqRaw(body, timeoutMs = 28000) {
+  if (!USER?.apiKey) throw new ApiError('No API key set. Add one in settings.');
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  let r;
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 28000);
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${USER.apiKey}` },
-      body: JSON.stringify({ model: MODEL, messages, max_tokens: max, temperature: 0.75 }),
+      body: JSON.stringify(body),
       signal: ctrl.signal,
     });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new ApiError('Request timed out. Try again.');
+    throw new ApiError('Could not reach Groq. Check your connection.');
+  } finally {
     clearTimeout(t);
-    if (!r.ok) { const e = await r.json().catch(()=>{}); console.error('Groq', r.status, e); return null; }
-    return (await r.json()).choices?.[0]?.message?.content || null;
-  } catch(e) { console.error(e); return null; }
+  }
+
+  if (!r.ok) {
+    const body = await r.json().catch(() => null);
+    console.error('Groq', r.status, body);
+    throw new ApiError(apiReason(r.status, body));
+  }
+
+  const text = (await r.json()).choices?.[0]?.message?.content;
+  if (!text) throw new ApiError('Groq returned an empty response.');
+  return text;
+}
+
+async function groq(messages, max = 600) {
+  return groqRaw({ model: MODEL, messages, max_tokens: max, temperature: 0.75 });
 }
 
 async function toB64(file) {
@@ -43,32 +98,31 @@ async function toB64(file) {
 }
 
 async function extractDoc(file, type) {
-  if (!file || !USER?.apiKey) return '';
-  if (!file.type.startsWith('image/')) return ''; // only images supported via vision
-  try {
-    const b64 = await toB64(file);
-    const prompt = type === 'existing'
-      ? 'Extract the complete study schedule from this image. List every day, subject, task, and time mentioned. Be thorough and structured.'
-      : type === 'report'
-      ? 'Extract all academic data from this report card. List every subject with its score, grade, and any teacher feedback or comments.'
-      : 'Extract all academic content from this syllabus/course planner. List every subject with units, topics, subtopics, and dates/months.';
+  if (!file) return '';
+  if (!file.type.startsWith('image/')) {
+    throw new ApiError(`${file.name} was skipped — only images can be read. Screenshot the PDF and upload that instead.`);
+  }
 
-    const key = USER.apiKey;
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-        messages: [{ role: 'user', content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: `data:${file.type};base64,${b64}` } }
-        ]}],
-        max_tokens: 1200
-      })
-    });
-    if (!r.ok) return '';
-    return (await r.json()).choices?.[0]?.message?.content || '';
-  } catch(e) { return ''; }
+  const b64 = await toB64(file);
+  const prompt = type === 'existing'
+    ? 'Extract the complete study schedule from this image. List every day, subject, task, and time mentioned. Be thorough and structured.'
+    : type === 'report'
+    ? 'Extract all academic data from this report card. List every subject with its score, grade, and any teacher feedback or comments.'
+    : 'Extract all academic content from this syllabus/course planner. List every subject with units, topics, subtopics, and dates/months.';
+
+  const text = await groqRaw({
+    model: VISION_MODEL,
+    messages: [{ role: 'user', content: [
+      { type: 'text', text: prompt },
+      { type: 'image_url', image_url: { url: `data:${file.type};base64,${b64}` } }
+    ]}],
+    max_tokens: 1200
+  });
+
+  if (text.trim().length < 20) {
+    throw new ApiError(`Nothing readable was found in ${file.name}. Try a clearer photo.`);
+  }
+  return text;
 }
 
 /* ── Plan generation ───────────────────────────────────── */
@@ -102,11 +156,13 @@ CRITICAL RULES — follow exactly:
 6. CS ROADMAP: Generate a CS roadmap appropriate for ${grade||'Grade 8'}. For Grade 5-6: focus on Scratch, basic Python, algorithms as puzzles. For Grade 7-8: binary, sorting, data structures, recursion.
 7. No coaching overlap. generateContent:true only for reading/problem/exercise tasks.
 8. Every task needs a "detail" field with specific, actionable advice.
+8b. "grades": copy every subject and mark from the report card. "score" must be a number 0-100. Omit the field entirely if no report card was provided — never invent marks.
 9. Colors: soft pastels — #FDE8D8, #E0F0FF, #DCF4E8, #E8E0F8, #FDE8EE, #E0F4EC, #F0E8D4, #E8F4DC, #E0EEF8, #FEF8EC
 
 Respond ONLY with valid JSON:
 {
   "summary": "2-3 sentences: student's strengths, weaknesses, key focus — based on their actual uploaded data",
+  "grades": [{ "name": "Subject name exactly as written on the report card", "score": 76, "grade": "B+" }],
   "days": {
     "${dayNums[0]||1}": { "name": "${days[0]||'Monday'}", "subjects": [{ "name": "Real Subject Name from docs", "color": "#FDE8D8", "duration": "X min", "tasks": [{ "text": "specific task with real topic", "mins": 15, "detail": "actionable how-to", "generateContent": false }] }] }
   },
@@ -122,11 +178,13 @@ Generate ALL ${days.length} day(s): ${days.map((d,i)=>`${dayNums[i]}=${d}`).join
     { role: 'user', content: prompt }
   ], 2800);
 
-  if (!reply) return null;
   try {
     const clean = reply.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     return JSON.parse(clean);
-  } catch(e) { console.error('Plan parse fail', e, reply?.slice(0,300)); return null; }
+  } catch(e) {
+    console.error('Plan parse fail', e, reply?.slice(0,300));
+    throw new ApiError('The model returned a plan that could not be read. Try generating again.');
+  }
 }
 
 function defaultPlan(prefs) {
@@ -458,19 +516,30 @@ async function kickoffGeneration(skipAI = false) {
   genStep(STEPS, 0);
 
   let existingText = '', reportText = '', syllabusText = '';
+  const problems = [];
+
+  async function read(file, type, label) {
+    if (!file) return '';
+    try {
+      return await extractDoc(file, type);
+    } catch (e) {
+      problems.push(`${label}: ${e.message}`);
+      return '';
+    }
+  }
 
   if (!skipAI && apiKey) {
     if (obHasExisting && obExistingFile) {
       genStep(STEPS, 0);
-      existingText = await extractDoc(obExistingFile, 'existing');
+      existingText = await read(obExistingFile, 'existing', 'Existing plan');
     }
     if (obReportFile) {
       genStep(STEPS, 0);
-      reportText = await extractDoc(obReportFile, 'report');
+      reportText = await read(obReportFile, 'report', 'Report card');
     }
     if (obSyllabusFile) {
       genStep(STEPS, 1);
-      syllabusText = await extractDoc(obSyllabusFile, 'syllabus');
+      syllabusText = await read(obSyllabusFile, 'syllabus', 'Syllabus');
     }
     genStep(STEPS, 2);
     document.getElementById('ob-gen-h').textContent = `building ${name}'s plan…`;
@@ -483,10 +552,14 @@ async function kickoffGeneration(skipAI = false) {
         { name, grade: USER.grade, hours: USER.hours, days: USER.days, focus: USER.focus, style: USER.style, coaching: USER.coaching },
         reportText, syllabusText, existingText
       );
-    } catch(e) { console.error(e); }
+    } catch(e) {
+      console.error(e);
+      problems.push(`Plan: ${e.message}`);
+    }
     genStep(STEPS, 4);
   }
 
+  const usedFallback = !plan;
   if (!plan) plan = defaultPlan({ name });
 
   USER.plan = plan;
@@ -494,11 +567,16 @@ async function kickoffGeneration(skipAI = false) {
   USER.syllabusText = syllabusText;
   S.set('mz', USER);
 
-  document.getElementById('ob-gen-h').textContent = 'all done!';
+  document.getElementById('ob-gen-h').textContent = usedFallback ? 'ready — with a default plan' : 'all done!';
   document.getElementById('ob-gen-sub').textContent = '';
   genStep(STEPS, 5);
   await new Promise(r => setTimeout(r, 600));
   launchApp();
+
+  if (usedFallback && !skipAI && apiKey) {
+    notify('Could not build a personalised plan, so the default schedule is loaded. Try regenerating from settings.', 'warn', 0);
+  }
+  problems.forEach(p => notify(p, 'warn', 0));
 }
 
 /* ── App ───────────────────────────────────────────────── */
@@ -508,8 +586,12 @@ function launchApp() {
   applyTheme(USER.theme || 'light');
   document.getElementById('sidebar-greeting').textContent = `hey, ${USER.name.toLowerCase()}`;
   initTabs();
+  initOverview();
+  initReview();
+  initReviewControls();
   initSession();
   initPlan();
+  renderSessionLog();
   const hasRoadmap = USER.roadmapSubjects?.length > 0;
   const csNav = document.querySelector('[data-tab="cs"]');
   const csMob = document.querySelector('.mob-nav[data-tab="cs"]');
@@ -533,6 +615,9 @@ function initTabs() {
   function activate(tab) {
     document.querySelectorAll('.nav-item,.mob-nav').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab').forEach(s => s.classList.toggle('active', s.id === `tab-${tab}`));
+    // Rebuild on entry: task counts and the streak move while you're elsewhere.
+    if (tab === 'overview') initOverview();
+    if (tab === 'review') initReview();
   }
   document.querySelectorAll('.nav-item,.mob-nav').forEach(b => {
     b.addEventListener('click', () => activate(b.dataset.tab));
@@ -568,15 +653,34 @@ function initSession() {
 }
 
 /* ── Countdown ─────────────────────────────────────────── */
+/* ── Term ──────────────────────────────────────────────── */
+/* One source of truth — the countdown panel and the overview card
+   both read from here. */
+const TERM = { name: 'term 1', start: new Date('2026-06-01'), end: new Date('2026-09-26') };
+
+function termProgress() {
+  const now = new Date();
+  const total = TERM.end - TERM.start;
+  const left = Math.max(0, TERM.end - now);
+  const elapsed = Math.max(0, now - TERM.start);
+  const fmtDate = d => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
+  return {
+    days: Math.ceil(left / 86400000),
+    weeks: (left / (7 * 86400000)).toFixed(1),
+    pct: Math.min(100, Math.round((elapsed / total) * 100)),
+    label: now < TERM.start ? `starts ${fmtDate(TERM.start)}`
+         : now > TERM.end   ? `${TERM.name} ended`
+         : `ends ${fmtDate(TERM.end)}`,
+  };
+}
+
 function initCountdown() {
-  const START = new Date('2026-06-01'), END = new Date('2026-09-26'), NOW = new Date();
-  const total = END - START, left = Math.max(0, END - NOW), elapsed = Math.max(0, NOW - START);
-  const days = Math.ceil(left / 86400000), weeks = (left / (7*86400000)).toFixed(1), pct = Math.min(100, Math.round((elapsed/total)*100));
-  document.getElementById('cd-days').textContent = days;
-  document.getElementById('cd-weeks').textContent = weeks;
-  document.getElementById('cd-pct').textContent = pct;
-  document.getElementById('cd-bar').style.width = pct + '%';
-  document.getElementById('cd-meta').textContent = NOW < START ? `starts ${START.toLocaleDateString('en-IN',{day:'numeric',month:'long'})}` : NOW > END ? 'term 1 ended' : `ends ${END.toLocaleDateString('en-IN',{day:'numeric',month:'long'})}`;
+  const t = termProgress();
+  document.getElementById('cd-days').textContent = t.days;
+  document.getElementById('cd-weeks').textContent = t.weeks;
+  document.getElementById('cd-pct').textContent = t.pct;
+  document.getElementById('cd-bar').style.width = t.pct + '%';
+  document.getElementById('cd-meta').textContent = t.label;
 }
 
 /* ── Streak ────────────────────────────────────────────── */
@@ -682,14 +786,11 @@ function initTimer() {
 }
 
 function logSession() {
-  const lbl=document.getElementById('timer-label').value.trim()||'study session';
-  const mins=Math.round(tTotal/60);
-  const time=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  const el=document.getElementById('session-log');
-  el.querySelector('.empty-state')?.remove();
-  const e=document.createElement('div');e.className='log-entry';
-  e.innerHTML=`<span class="log-check">✓</span><span>${lbl} <em style="color:var(--tx-3);font-size:0.65rem">(${mins}m)</em></span><span class="log-time">${time}</span>`;
-  el.prepend(e);
+  const label = document.getElementById('timer-label').value.trim() || 'study session';
+  const mins = Math.round(tTotal / 60);
+  if (mins <= 0) return;
+  addSession({ at: new Date().toISOString(), label, mins, subject: guessSubject(label) });
+  renderSessionLog();
 }
 
 /* ── Checklist ─────────────────────────────────────────── */
@@ -698,14 +799,21 @@ function initChecklist(dow, day) {
   const key = `mz-tasks-${new Date().toDateString()}`;
   const saved = S.get(key) || {};
   const tasks = day.subjects.flatMap(s => s.tasks.map(t => ({...t,_subj:s.name,_color:s.color})));
+  tasks.forEach((t,i)=>{ t._i=i; });
+
+  // Exam mode: subjects with a nearer exam rise to the top. Stable, and
+  // _i is fixed above so saved completion state follows the task.
+  const examOrder = t => { const e = nextExam(t._subj); return e ? daysUntil(e.date) : 9999; };
+  const ordered = [...tasks].sort((a,b) => examOrder(a) - examOrder(b) || a._i - b._i);
 
   el.innerHTML='';
-  tasks.forEach((t,i)=>{
-    t._i=i;
+  ordered.forEach(t=>{
+    const i=t._i;
     const done=!!saved[i];
     const item=document.createElement('div');
     item.className='task-item'+(done?' done':'');
     item.dataset.i=i;
+    if(nextExam(t._subj)&&daysUntil(nextExam(t._subj).date)<=EXAM_WINDOW) item.classList.add('exam-focus');
     const pill=t.mins?`<span class="task-pill">${t.mins}m</span>`:'';
     const ai=t.generateContent?`<span class="task-ai">✦</span>`:'';
     item.innerHTML=`<input type="checkbox"${done?' checked':''}/>
@@ -717,6 +825,7 @@ function initChecklist(dow, day) {
       S.set(key,saved);
       item.classList.toggle('done',e.target.checked);
       updateTaskBar(tasks.length,saved);
+      if(e.target.checked) scheduleReview(t);
       const allDone=Object.values(saved).filter(Boolean).length===tasks.length;
       const shownKey=`mz-reward-${new Date().toDateString()}`;
       if(allDone&&!S.get(shownKey)){S.set(shownKey,true);markDay();showReward(day);}
@@ -799,9 +908,13 @@ async function fetchTip(task) {
   chatHistory=[];
   const sys=`You are a concise study coach for ${USER.name}, a Cambridge ${USER.grade||'Grade 8'} student. Current task: "${task.text}" (${task._subj}, ${task.mins?task.mins+' min':'flexible'}). 2-3 sentences max. Specific. Actionable. No fluff.`;
   const msg=`One specific tip for: "${task.text}"`;
-  const r=await groq([{role:'system',content:sys},{role:'user',content:msg}],180);
-  if(r){el.textContent=r;chatHistory=[{role:'system',content:sys},{role:'user',content:msg},{role:'assistant',content:r}];}
-  else el.innerHTML='<span style="font-size:0.72rem;color:var(--tx-3)">couldn\'t load — check api key in settings</span>';
+  try{
+    const r=await groq([{role:'system',content:sys},{role:'user',content:msg}],180);
+    el.textContent=r;
+    chatHistory=[{role:'system',content:sys},{role:'user',content:msg},{role:'assistant',content:r}];
+  }catch(e){
+    el.innerHTML=`<span style="font-size:0.72rem;color:var(--tx-3)">${esc(e.message)}</span>`;
+  }
 }
 
 async function fetchGen(task) {
@@ -812,9 +925,12 @@ Student: ${USER.name}. Context: ${task.detail||''}
 Format with ---HEADING--- sections. 3-4 sections. Relevant to task.
 Use spoiler format for answers: ---ANSWERS--- or ---MARK SCHEME---
 150-250 words total. Specific and actionable.`;
-  const r=await groq([{role:'system',content:'Generate structured educational content. Format exactly with ---HEADING--- sections. No preamble.'},{role:'user',content:prompt}],500);
-  if(r) el.innerHTML=parseGen(r);
-  else el.innerHTML='<span style="font-size:0.72rem;color:var(--tx-3)">couldn\'t generate — check api key</span>';
+  try{
+    const r=await groq([{role:'system',content:'Generate structured educational content. Format exactly with ---HEADING--- sections. No preamble.'},{role:'user',content:prompt}],500);
+    el.innerHTML=parseGen(r);
+  }catch(e){
+    el.innerHTML=`<span style="font-size:0.72rem;color:var(--tx-3)">${esc(e.message)}</span>`;
+  }
 }
 
 function parseGen(raw) {
@@ -841,9 +957,14 @@ async function sendChat() {
   const lb=document.createElement('div');lb.className='chat-bubble ai';lb.innerHTML='<span style="color:var(--tx-3)">…</span>';log.appendChild(lb);
   log.scrollTop=log.scrollHeight;
   chatHistory.push({role:'user',content:msg});
-  const r=await groq(chatHistory,280);
-  if(r){chatHistory.push({role:'assistant',content:r});lb.textContent=r;}
-  else lb.innerHTML='<span style="color:var(--tx-3)">error — check api key</span>';
+  try{
+    const r=await groq(chatHistory,280);
+    chatHistory.push({role:'assistant',content:r});
+    lb.textContent=r;
+  }catch(e){
+    chatHistory.pop();
+    lb.innerHTML=`<span style="color:var(--tx-3)">${esc(e.message)}</span>`;
+  }
   log.scrollTop=log.scrollHeight;
 }
 
@@ -973,10 +1094,515 @@ function initPlan(){
     document.getElementById('regen-plan-btn').textContent='generating…';
     try{
       const plan=await generatePlan({name:USER.name,grade:USER.grade,hours:USER.hours,days:USER.days,focus:USER.focus,style:USER.style,coaching:USER.coaching},USER.reportText||'',USER.syllabusText||'','');
-      if(plan){USER.plan=plan;S.set('mz',USER);initPlan();initCS();initProjects();alert('Plan regenerated!');}
-    }catch(e){console.error(e);}
+      USER.plan=plan;S.set('mz',USER);initPlan();initCS();initProjects();
+      notify('Plan regenerated.','ok');
+    }catch(e){
+      console.error(e);
+      notify(`Could not regenerate: ${e.message} Your old plan is untouched.`,'warn');
+    }
     document.getElementById('regen-plan-btn').textContent='↻ regenerate';
   });
+}
+
+/* ══════════════════════════════════════════════════════════
+   Sessions · Reviews · Exams · Backup
+══════════════════════════════════════════════════════════ */
+
+/* Dates are stored as local YYYY-MM-DD strings. Comparing them as
+   strings sorts correctly, and it avoids new Date('2026-08-03')
+   silently being parsed as UTC and landing on the wrong day. */
+const dayKey = d => {
+  const x = d instanceof Date ? d : new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+};
+const parseDay = s => { const [y,m,d] = String(s).split('-').map(Number); return new Date(y, m-1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const daysUntil = s => Math.round((parseDay(s) - parseDay(dayKey(new Date()))) / 86400000);
+const today = () => dayKey(new Date());
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+/* ── Sessions ──────────────────────────────────────────── */
+/* Previously the timer log was written straight to the DOM and lost on
+   refresh. It is persisted now, which also makes time stats possible. */
+
+function getSessions() { return S.get('mz-sessions') || []; }
+
+function addSession(entry) {
+  const list = getSessions();
+  list.unshift(entry);
+  S.set('mz-sessions', list.slice(0, 500));
+}
+
+function sessionStats(days = 7) {
+  const from = dayKey(addDays(new Date(), -(days - 1)));
+  const recent = getSessions().filter(s => dayKey(s.at) >= from);
+  const bySubject = {};
+  let total = 0;
+  recent.forEach(s => {
+    total += s.mins;
+    const k = s.subject || 'unlabelled';
+    bySubject[k] = (bySubject[k] || 0) + s.mins;
+  });
+  const byDay = {};
+  recent.forEach(s => { const k = dayKey(s.at); byDay[k] = (byDay[k] || 0) + s.mins; });
+  return { total, count: recent.length, bySubject, byDay, days };
+}
+
+/* Best guess at which subject a session belongs to: the open task wins,
+   otherwise match the free-text label against the plan's subject names. */
+function guessSubject(label) {
+  if (currentTask?._subj) return currentTask._subj;
+  const names = new Set();
+  Object.values(USER?.plan?.days || {}).forEach(d => (d.subjects || []).forEach(s => names.add(s.name)));
+  const l = (label || '').toLowerCase();
+  for (const n of names) if (n && l.includes(n.toLowerCase())) return n;
+  return null;
+}
+
+function renderSessionLog() {
+  const el = document.getElementById('session-log');
+  if (!el) return;
+  const todays = getSessions().filter(s => dayKey(s.at) === today());
+  if (!todays.length) { el.innerHTML = '<p class="empty-state">no sessions yet</p>'; return; }
+  el.innerHTML = todays.map(s => {
+    const time = new Date(s.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="log-entry"><span class="log-check">✓</span><span>${esc(s.label)} <em style="color:var(--tx-3);font-size:0.65rem">(${s.mins}m)</em></span><span class="log-time">${time}</span></div>`;
+  }).join('');
+}
+
+/* ── Spaced repetition ─────────────────────────────────── */
+/* An SM-2 variant. Completing a task creates a review item; recalling it
+   well pushes it further out, forgetting resets it. Intervals are capped
+   so nothing falls due after the exam it is meant to prepare for. */
+
+const FIRST_GAP = 1, SECOND_GAP = 3, MIN_EASE = 1.3;
+
+function hashStr(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+}
+
+const reviewId = (text, subject) => 'r' + hashStr(`${subject || ''}::${text}`);
+
+function getReviews() { return S.get('mz-reviews') || {}; }
+function saveReviews(r) { S.set('mz-reviews', r); }
+
+function scheduleReview(task) {
+  if (!task?.text) return;
+  const reviews = getReviews();
+  const id = reviewId(task.text, task._subj);
+  if (reviews[id]) return; // already tracked — don't reset its progress
+  reviews[id] = {
+    id, text: task.text, subject: task._subj || null,
+    ease: 2.5, interval: FIRST_GAP, reps: 0, lapses: 0,
+    created: today(), due: dayKey(addDays(new Date(), FIRST_GAP)),
+  };
+  saveReviews(reviews);
+}
+
+/** Next interval for a given answer, without saving. Used for previews. */
+function nextInterval(r, quality) {
+  let { ease, interval, reps } = r;
+  if (quality === 'again') return { interval: FIRST_GAP, ease: Math.max(MIN_EASE, ease - 0.2), reps: 0 };
+  reps++;
+  if (quality === 'hard') {
+    ease = Math.max(MIN_EASE, ease - 0.15);
+    interval = Math.max(FIRST_GAP, Math.round(interval * 1.2));
+  } else if (quality === 'good') {
+    interval = reps === 1 ? FIRST_GAP : reps === 2 ? SECOND_GAP : Math.round(interval * ease);
+  } else {
+    ease = ease + 0.15;
+    interval = reps === 1 ? SECOND_GAP : Math.round(interval * ease * 1.3);
+  }
+  return { interval: Math.max(1, interval), ease, reps };
+}
+
+/** Days until the next exam for a subject, minus one, or null. */
+function examCap(subject) {
+  const e = nextExam(subject);
+  if (!e) return null;
+  const d = daysUntil(e.date);
+  return d > 1 ? d - 1 : 1;
+}
+
+function gradeReview(id, quality) {
+  const reviews = getReviews();
+  const r = reviews[id];
+  if (!r) return null;
+
+  const next = nextInterval(r, quality);
+  r.ease = next.ease;
+  r.reps = next.reps;
+  r.interval = next.interval;
+  if (quality === 'again') r.lapses++;
+
+  const cap = examCap(r.subject);
+  r.cappedByExam = cap !== null && r.interval > cap;
+  if (r.cappedByExam) r.interval = Math.max(1, cap);
+
+  r.due = dayKey(addDays(new Date(), r.interval));
+  r.last = today();
+  saveReviews(reviews);
+  return r;
+}
+
+function dueReviews() {
+  const t = today();
+  return Object.values(getReviews())
+    .filter(r => r.due <= t)
+    .sort((a, b) => {
+      // Subjects with a nearer exam come first.
+      const ea = nextExam(a.subject), eb = nextExam(b.subject);
+      const da = ea ? daysUntil(ea.date) : 9999;
+      const db = eb ? daysUntil(eb.date) : 9999;
+      if (da !== db) return da - db;
+      return a.due < b.due ? -1 : a.due > b.due ? 1 : 0;
+    });
+}
+
+function upcomingReviewCount(days = 7) {
+  const limit = dayKey(addDays(new Date(), days));
+  const t = today();
+  return Object.values(getReviews()).filter(r => r.due > t && r.due <= limit).length;
+}
+
+/* ── Exams ─────────────────────────────────────────────── */
+
+function getExams() {
+  return (S.get('mz-exams') || [])
+    .filter(e => e && e.subject && e.date)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+function saveExams(list) { S.set('mz-exams', list); }
+
+function upcomingExams() {
+  const t = today();
+  return getExams().filter(e => e.date >= t);
+}
+
+function nextExam(subject) {
+  if (!subject) return null;
+  const s = subject.toLowerCase();
+  return upcomingExams().find(e => e.subject.toLowerCase() === s) || null;
+}
+
+/** Exam mode kicks in inside this window. */
+const EXAM_WINDOW = 14;
+function examsSoon() {
+  return upcomingExams().filter(e => daysUntil(e.date) <= EXAM_WINDOW);
+}
+
+/* ── Backup ────────────────────────────────────────────── */
+
+function exportData() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('mz')) data[k] = localStorage.getItem(k);
+  }
+  const payload = { app: 'meridian-zenith', version: 1, exportedAt: new Date().toISOString(), data };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `meridian-backup-${today()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importData(file) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch {
+    throw new Error('That file is not valid JSON.');
+  }
+  if (!parsed || typeof parsed.data !== 'object' || parsed.data === null) {
+    throw new Error('That does not look like a Meridian backup.');
+  }
+  if (!parsed.data.mz) {
+    throw new Error('That backup has no profile in it — nothing to restore.');
+  }
+  const keys = Object.keys(parsed.data).filter(k => k.startsWith('mz'));
+  if (!keys.length) throw new Error('That backup is empty.');
+  keys.forEach(k => localStorage.setItem(k, parsed.data[k]));
+  return keys.length;
+}
+
+/* ── Review tab ────────────────────────────────────────── */
+
+let reviewQueue = [];
+
+function fmtGap(days) {
+  if (days < 1) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days < 30) return `in ${days}d`;
+  return `in ${Math.round(days / 7)}w`;
+}
+
+function initReview() {
+  reviewQueue = dueReviews();
+  renderReview();
+}
+
+function renderReview() {
+  const countEl = document.getElementById('review-count');
+  const emptyEl = document.getElementById('review-empty');
+  const cardEl = document.getElementById('review-card');
+  const examEl = document.getElementById('review-exam');
+  const upcomingEl = document.getElementById('review-upcoming');
+  if (!countEl) return;
+
+  countEl.textContent = reviewQueue.length;
+
+  // Exam banner
+  const soon = examsSoon();
+  examEl.innerHTML = soon.length
+    ? soon.slice(0, 3).map(e => {
+        const d = daysUntil(e.date);
+        return `<span class="exam-pill${d <= 3 ? ' urgent' : ''}">${esc(e.subject)} · ${d <= 0 ? 'today' : plural(d, 'day')}</span>`;
+      }).join('')
+    : '';
+
+  const later = upcomingReviewCount(7);
+  upcomingEl.textContent = later ? `${plural(later, 'card')} coming up in the next 7 days` : '';
+
+  if (!reviewQueue.length) {
+    cardEl.style.display = 'none';
+    emptyEl.style.display = 'block';
+    const total = Object.keys(getReviews()).length;
+    emptyEl.innerHTML = total
+      ? `<div class="review-done">✓</div><p>Nothing due today. ${later ? `${plural(later, 'card')} due this week.` : 'You are all caught up.'}</p>`
+      : `<p>Tick off tasks in your plan and they will start appearing here for review — tomorrow, then three days later, then further apart each time you remember them.</p>`;
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  cardEl.style.display = 'flex';
+
+  const r = reviewQueue[0];
+  const exam = nextExam(r.subject);
+  document.getElementById('review-subject').innerHTML = r.subject
+    ? `<span class="review-subj-tag">${esc(r.subject)}</span>${exam ? `<span class="review-exam-note">exam ${fmtGap(daysUntil(exam.date))}</span>` : ''}`
+    : '';
+  document.getElementById('review-text').textContent = r.text;
+
+  const meta = document.getElementById('review-meta');
+  meta.textContent = r.reps
+    ? `seen ${plural(r.reps, 'time')}${r.lapses ? ` · forgotten ${r.lapses}×` : ''}`
+    : 'first review';
+
+  // Each button previews where it sends the card.
+  document.querySelectorAll('#review-actions .rev-btn').forEach(b => {
+    const preview = nextInterval(r, b.dataset.q);
+    const cap = examCap(r.subject);
+    const gap = cap !== null && preview.interval > cap ? Math.max(1, cap) : preview.interval;
+    b.querySelector('.rev-gap').textContent = fmtGap(gap);
+  });
+}
+
+function answerReview(quality) {
+  const r = reviewQueue.shift();
+  if (!r) return;
+  const updated = gradeReview(r.id, quality);
+  if (updated?.cappedByExam) {
+    notify(`Brought forward to ${fmtGap(updated.interval)} so it lands before your ${updated.subject} exam.`, 'ok', 5000);
+  }
+  renderReview();
+}
+
+function initReviewControls() {
+  document.querySelectorAll('#review-actions .rev-btn').forEach(b => {
+    b.addEventListener('click', () => answerReview(b.dataset.q));
+  });
+  document.addEventListener('keydown', e => {
+    const tab = document.getElementById('tab-review');
+    if (!tab?.classList.contains('active')) return;
+    if (['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) return;
+    const map = { '1':'again', '2':'hard', '3':'good', '4':'easy' };
+    if (map[e.key]) { e.preventDefault(); answerReview(map[e.key]); }
+  });
+}
+
+/* ── Overview tab ──────────────────────────────────────── */
+
+/* study-plan hardcoded one student's grades. Here they come from the
+   report card the AI read, so every card degrades to an empty state
+   rather than showing numbers that belong to nobody. */
+function gradeColour(score) {
+  return score >= 90 ? '#2D8A4E' : score >= 80 ? '#4A9E6A' : score >= 70 ? '#C45C1A' : '#991B1B';
+}
+
+function initOverview() {
+  const el = document.getElementById('overview-grid');
+  if (!el || !USER?.plan) return;
+
+  const now = new Date();
+  const streak = getStreak();
+  const streakDays = streak.days || [];
+
+  // Today's tasks
+  const dow = now.getDay();
+  const day = USER.plan.days?.[dow] || USER.plan.days?.[String(dow)];
+  const saved = S.get(`mz-tasks-${now.toDateString()}`) || {};
+  const tasks = day ? (day.subjects || []).flatMap(s => s.tasks || []) : [];
+  const done = Object.values(saved).filter(Boolean).length;
+
+  // 28-day habit grid
+  const gridDays = [];
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    gridDays.push({ date: d.toDateString(), isToday: i === 0 });
+  }
+
+  const grades = Array.isArray(USER.plan.grades) ? USER.plan.grades : [];
+  const focus = (USER.focus || []).map(f => f.toLowerCase());
+  const term = termProgress();
+  const roadmap = USER.plan.csRoadmap || [];
+
+  const cards = [];
+
+  // Today
+  cards.push(`
+    <div class="ov-card">
+      <div class="panel-row"><span class="eyebrow">today</span><span class="eyebrow">${now.toLocaleDateString('en-IN',{weekday:'long'})}</span></div>
+      ${day ? `
+        <div class="ov-stat">${done}<span style="font-size:1rem;color:var(--tx-3)"> / ${tasks.length}</span></div>
+        <div class="ov-stat-lbl">tasks complete today</div>
+        <div class="progress-track"><div class="progress-fill" style="width:${tasks.length ? (done/tasks.length)*100 : 0}%"></div></div>
+        <div style="font-size:0.75rem;color:var(--tx-2)">${(day.subjects||[]).map(s=>`<span class="subj-chip" style="background:${s.color};color:#333;margin-right:4px">${esc(s.name)}</span>`).join('')}</div>
+      ` : `<div class="ov-empty">Nothing scheduled today — it's a rest day.</div>`}
+    </div>`);
+
+  // Streak
+  cards.push(`
+    <div class="ov-card">
+      <div class="panel-row"><span class="eyebrow">streak</span><span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--a)">${streak.current} day${streak.current!==1?'s':''}</span></div>
+      <div style="display:flex;align-items:baseline;gap:0.5rem">
+        <div class="ov-stat">${streak.current}</div>
+        <div>
+          <div style="font-size:0.78rem;color:var(--tx-2)">current streak</div>
+          <div style="font-size:0.72rem;color:var(--tx-3)">best: ${streak.best||0} days</div>
+        </div>
+      </div>
+      <div class="ov-week-grid">
+        ${gridDays.map(d=>`<div class="ov-week-day${streakDays.includes(d.date)?' done':''}${d.isToday?' today':''}" title="${d.date}"></div>`).join('')}
+      </div>
+      <div style="font-size:0.68rem;color:var(--tx-3)">last 28 days</div>
+    </div>`);
+
+  // Grades
+  const focusNames = grades.filter(g => focus.includes((g.name||'').toLowerCase())).map(g => g.name);
+  cards.push(`
+    <div class="ov-card wide">
+      <div class="panel-row">
+        <span class="eyebrow">latest results</span>
+        ${focusNames.length ? `<span class="ov-focus-badge">⚠ focus: ${focusNames.map(esc).join(' · ')}</span>` : ''}
+      </div>
+      ${grades.length ? `
+        <div class="ov-subject-list">
+          ${grades.map(g => {
+            const score = Number(g.score);
+            const pct = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+            const isFocus = focus.includes((g.name||'').toLowerCase());
+            return `<div class="ov-subject-row">
+              <span class="ov-subject-name">${esc(g.name||'—')}${isFocus?' <span style="font-size:0.6rem;color:var(--a)">↑ focus</span>':''}</span>
+              <div class="ov-bar-row" style="flex:1;max-width:200px;margin:0 0.75rem">
+                <div class="ov-bar-track"><div class="ov-bar-fill" style="width:${pct}%;background:${gradeColour(pct)}"></div></div>
+              </div>
+              <span class="ov-subject-grade" style="color:${gradeColour(pct)}">${Number.isFinite(score)?score:'—'}${g.grade?` (${esc(g.grade)})`:''}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      ` : `<div class="ov-empty">No grades yet. Upload a report card in <button id="ov-to-settings">settings</button> and regenerate your plan to see them here.</div>`}
+    </div>`);
+
+  // Term countdown
+  cards.push(`
+    <div class="ov-card">
+      <span class="eyebrow">${TERM.name} · ${TERM.start.toLocaleDateString('en-IN',{month:'long'})} → ${TERM.end.toLocaleDateString('en-IN',{month:'long'})}</span>
+      <div class="ov-stat">${term.days}</div>
+      <div class="ov-stat-lbl">days remaining</div>
+      <div class="progress-track"><div class="progress-fill" style="width:${term.pct}%"></div></div>
+      <div style="font-size:0.72rem;color:var(--tx-3)">${term.pct}% through · ${term.label}</div>
+    </div>`);
+
+  // CS roadmap — opt-in, so only show it when there is one
+  if (roadmap.length) {
+    cards.push(`
+      <div class="ov-card">
+        <span class="eyebrow">cs roadmap</span>
+        <div class="ov-stat">${roadmap.length}</div>
+        <div class="ov-stat-lbl">months · ${roadmap.reduce((n,m)=>n+(m.weeks?.length||0),0)} weeks</div>
+        <div style="display:flex;flex-direction:column;gap:0.3rem;margin-top:0.25rem">
+          ${roadmap.map(m=>`<div style="font-size:0.75rem;color:var(--tx-2)"><span style="color:var(--a);margin-right:0.35rem">·</span>${esc(m.month||'')} — ${esc(m.theme||'')}</div>`).join('')}
+        </div>
+      </div>`);
+  }
+
+  // Study time
+  const stats = sessionStats(7);
+  const topSubjects = Object.entries(stats.bySubject).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  const maxMins = topSubjects.length ? topSubjects[0][1] : 1;
+  cards.push(`
+    <div class="ov-card">
+      <div class="panel-row"><span class="eyebrow">study time</span><span class="eyebrow">last 7 days</span></div>
+      ${stats.total ? `
+        <div class="ov-stat">${Math.floor(stats.total/60)}<span style="font-size:1rem;color:var(--tx-3)">h </span>${stats.total%60}<span style="font-size:1rem;color:var(--tx-3)">m</span></div>
+        <div class="ov-stat-lbl">across ${plural(stats.count,'session')}</div>
+        <div class="ov-subject-list">
+          ${topSubjects.map(([name,mins])=>`
+            <div class="ov-subject-row">
+              <span class="ov-subject-name">${esc(name)}</span>
+              <div class="ov-bar-row" style="flex:1;max-width:140px;margin:0 0.75rem">
+                <div class="ov-bar-track"><div class="ov-bar-fill" style="width:${(mins/maxMins)*100}%;background:var(--a)"></div></div>
+              </div>
+              <span class="ov-subject-grade">${mins}m</span>
+            </div>`).join('')}
+        </div>
+      ` : `<div class="ov-empty">No sessions logged yet. Run the timer on the session tab and it will show up here.</div>`}
+    </div>`);
+
+  // Reviews
+  const due = dueReviews().length;
+  const tracked = Object.keys(getReviews()).length;
+  cards.push(`
+    <div class="ov-card">
+      <div class="panel-row"><span class="eyebrow">review</span><span class="eyebrow">${tracked ? plural(tracked,'card') : ''}</span></div>
+      ${tracked ? `
+        <div class="ov-stat">${due}</div>
+        <div class="ov-stat-lbl">due today</div>
+        <div style="font-size:0.75rem;color:var(--tx-2)">${upcomingReviewCount(7)} more in the next 7 days</div>
+      ` : `<div class="ov-empty">Tick off tasks and they will come back here for spaced review.</div>`}
+    </div>`);
+
+  // Exams
+  const exams = upcomingExams().slice(0, 5);
+  if (exams.length) {
+    const soonest = daysUntil(exams[0].date);
+    cards.push(`
+      <div class="ov-card">
+        <div class="panel-row"><span class="eyebrow">exams</span>${soonest<=EXAM_WINDOW?'<span class="ov-focus-badge">exam mode on</span>':''}</div>
+        <div class="ov-stat">${soonest<=0?'today':soonest}</div>
+        <div class="ov-stat-lbl">${soonest<=0?`${exams[0].subject} exam`:`days to ${exams[0].subject}`}</div>
+        <div class="ov-subject-list">
+          ${exams.map(e=>{
+            const d=daysUntil(e.date);
+            return `<div class="ov-subject-row">
+              <span class="ov-subject-name">${esc(e.subject)}</span>
+              <span class="ov-subject-grade"${d<=EXAM_WINDOW?' style="color:#C45C1A"':''}>${d<=0?'today':plural(d,'day')}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`);
+  }
+
+  el.innerHTML = cards.join('');
+  document.getElementById('ov-to-settings')?.addEventListener('click', openSettings);
 }
 
 /* ── CS tab ────────────────────────────────────────────── */
@@ -1293,15 +1919,98 @@ function initSettings(){
     if(!USER.apiKey){alert('Add a Groq API key first.');return;}
     closeSettings();
     let rt=USER.reportText||'',st=USER.syllabusText||'';
-    if(sReport)rt=await extractDoc(sReport,'report');
-    if(sSyllabus)st=await extractDoc(sSyllabus,'syllabus');
-    const plan=await generatePlan({name:USER.name,grade:USER.grade,hours:USER.hours,days:USER.days,focus:USER.focus,style:USER.style,coaching:USER.coaching},rt,st,'');
-    if(plan){USER.plan=plan;USER.reportText=rt;USER.syllabusText=st;S.set('mz',USER);initPlan();initCS();initProjects();alert('Plan regenerated!');}
+
+    // Keep whatever was already stored if a re-read fails — a failed
+    // upload must never wipe good data.
+    if(sReport){
+      try{ rt=await extractDoc(sReport,'report'); }
+      catch(e){ notify(`Report card: ${e.message} Keeping the previous one.`,'warn'); }
+    }
+    if(sSyllabus){
+      try{ st=await extractDoc(sSyllabus,'syllabus'); }
+      catch(e){ notify(`Syllabus: ${e.message} Keeping the previous one.`,'warn'); }
+    }
+
+    try{
+      const plan=await generatePlan({name:USER.name,grade:USER.grade,hours:USER.hours,days:USER.days,focus:USER.focus,style:USER.style,coaching:USER.coaching},rt,st,'');
+      USER.plan=plan;USER.reportText=rt;USER.syllabusText=st;S.set('mz',USER);
+      initPlan();initCS();initProjects();
+      notify('Plan regenerated.','ok');
+    }catch(e){
+      console.error(e);
+      notify(`Could not regenerate: ${e.message} Your old plan is untouched.`,'warn');
+    }
+  });
+
+  renderExamList();
+  document.getElementById('s-exam-add').addEventListener('click',()=>{
+    const subject=document.getElementById('s-exam-subject').value.trim();
+    const date=document.getElementById('s-exam-date').value;
+    if(!subject||!date){notify('Enter both a subject and a date.','warn',4000);return;}
+    const list=getExams();
+    if(list.some(e=>e.subject.toLowerCase()===subject.toLowerCase()&&e.date===date)){
+      notify('That exam is already on the list.','warn',4000);return;
+    }
+    list.push({subject,date});
+    saveExams(list);
+    document.getElementById('s-exam-subject').value='';
+    document.getElementById('s-exam-date').value='';
+    renderExamList();
+    refreshAfterDataChange();
+  });
+
+  document.getElementById('s-export').addEventListener('click',()=>{
+    try{ exportData(); notify('Backup downloaded.','ok',4000); }
+    catch(e){ notify(`Export failed: ${e.message}`,'warn'); }
+  });
+  document.getElementById('s-import-btn').addEventListener('click',()=>document.getElementById('s-import').click());
+  document.getElementById('s-import').addEventListener('change',async e=>{
+    const file=e.target.files[0];
+    e.target.value='';
+    if(!file)return;
+    if(!confirm('Restoring will replace everything currently in this browser. Continue?'))return;
+    try{
+      const n=await importData(file);
+      alert(`Restored ${n} items. The page will reload.`);
+      location.reload();
+    }catch(err){
+      notify(`Could not restore: ${err.message}`,'warn');
+    }
   });
 
   document.getElementById('s-reset').addEventListener('click',()=>{
-    if(confirm('Reset everything? This cannot be undone.')){localStorage.clear();location.reload();}
+    if(confirm('Reset everything? This erases your plan, streak, sessions and review history. Export a backup first if you might want it back.')){localStorage.clear();location.reload();}
   });
+}
+
+function renderExamList(){
+  const el=document.getElementById('s-exam-list');
+  if(!el)return;
+  const list=getExams();
+  if(!list.length){el.innerHTML='<p class="settings-hint">no exams added yet.</p>';return;}
+  el.innerHTML=list.map((e,i)=>{
+    const d=daysUntil(e.date);
+    const when=d<0?'passed':d===0?'today':plural(d,'day');
+    return `<div class="exam-row${d>=0&&d<=EXAM_WINDOW?' soon':''}${d<0?' past':''}">
+      <span class="exam-subject">${esc(e.subject)}</span>
+      <span class="exam-when">${when}</span>
+      <button class="exam-del" data-i="${i}" aria-label="Remove">×</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.exam-del').forEach(b=>b.addEventListener('click',()=>{
+    const list=getExams();
+    list.splice(Number(b.dataset.i),1);
+    saveExams(list);
+    renderExamList();
+    refreshAfterDataChange();
+  }));
+}
+
+/* Exam dates change task order, review caps and the overview at once. */
+function refreshAfterDataChange(){
+  initOverview();
+  initReview();
+  try{ initPlan(); }catch(e){ console.error(e); }
 }
 
 /* ── Reward ────────────────────────────────────────────── */
@@ -1313,10 +2022,13 @@ async function showReward(day){
   document.getElementById('reward-sub').textContent=`every task done for ${day.name.toLowerCase()}.`;
   const ai=document.getElementById('reward-ai');ai.textContent='…';
   const st=getStreak();
-  const r=await groq([
-    {role:'system',content:`Study coach for ${USER.name}. Warm, brief, genuine.`},
-    {role:'user',content:`${USER.name} just completed every task for ${day.name}. Streak: ${st.current} day${st.current!==1?'s':''}. One sentence — genuine, specific to what they did, not generic.`}
-  ],80);
+  let r=null;
+  try{
+    r=await groq([
+      {role:'system',content:`Study coach for ${USER.name}. Warm, brief, genuine.`},
+      {role:'user',content:`${USER.name} just completed every task for ${day.name}. Streak: ${st.current} day${st.current!==1?'s':''}. One sentence — genuine, specific to what they did, not generic.`}
+    ],80);
+  }catch(e){ console.error(e); }
   ai.textContent=r||'full day done — that\'s the habit being built.';
   document.getElementById('reward-close').addEventListener('click',()=>scrim.style.display='none',{once:true});
 }

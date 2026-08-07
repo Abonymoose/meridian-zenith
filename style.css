@@ -777,3 +777,168 @@ details.gen-block summary{cursor:pointer;list-style:none;padding:0.3rem 0.7rem;f
 .tour-dots{display:flex;gap:4px;margin-top:0.875rem;justify-content:center}
 .tour-dot{width:5px;height:5px;border-radius:50%;background:var(--bd);transition:all 0.2s}
 .tour-dot.active{background:var(--a);width:14px;border-radius:3px}
+
+/* ── Notices ────────────────────────────────────────────────────────────────── */
+#mz-notices{
+  position:fixed;bottom:1rem;right:1rem;z-index:9999;
+  display:flex;flex-direction:column;gap:0.5rem;
+  max-width:min(26rem,calc(100vw - 2rem));pointer-events:none;
+}
+.mz-notice{
+  pointer-events:auto;
+  display:flex;align-items:flex-start;gap:0.75rem;
+  background:var(--panel);color:var(--tx-2);
+  border:1px solid var(--bd);border-left:3px solid var(--tx-3);
+  border-radius:8px;padding:0.7rem 0.85rem;
+  font-size:0.78rem;line-height:1.5;
+  box-shadow:var(--shadow);
+  animation:mz-notice-in 0.22s ease-out;
+}
+.mz-notice.warn{border-left-color:#C4703A}
+.mz-notice.ok{border-left-color:var(--a)}
+.mz-notice span{flex:1;min-width:0}
+.mz-notice button{
+  background:none;border:none;color:var(--tx-3);
+  font-size:1rem;line-height:1;cursor:pointer;
+  padding:0 0.15rem;flex-shrink:0;
+}
+.mz-notice button:hover{color:var(--tx)}
+.mz-notice.out{animation:mz-notice-out 0.22s ease-in forwards}
+
+@keyframes mz-notice-in{from{opacity:0;transform:translateY(0.5rem)}to{opacity:1;transform:none}}
+@keyframes mz-notice-out{to{opacity:0;transform:translateY(0.4rem)}}
+
+@media (max-width:640px){
+  #mz-notices{left:0.75rem;right:0.75rem;bottom:0.75rem;max-width:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .mz-notice,.mz-notice.out{animation:none}
+}
+
+/* ── Overview tab ── */
+.overview-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:1rem;padding:1.5rem;
+}
+.ov-card{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:1.25rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:0.75rem}
+.ov-card-title{font-size:0.95rem;font-weight:500;color:var(--tx)}
+.ov-card-sub{font-size:0.75rem;color:var(--tx-3);line-height:1.55}
+.ov-stat{font-size:2rem;font-weight:300;letter-spacing:-0.04em;color:var(--a);line-height:1}
+.ov-stat-lbl{font-size:0.62rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--tx-3)}
+.ov-subject-list{display:flex;flex-direction:column;gap:0.35rem}
+.ov-subject-row{display:flex;align-items:center;justify-content:space-between;font-size:0.78rem}
+.ov-subject-name{color:var(--tx-2)}
+.ov-subject-grade{font-family:'JetBrains Mono',monospace;font-size:0.72rem;font-weight:500}
+.ov-grade-A{color:#2D8A4E}.ov-grade-B{color:#C45C1A}.ov-grade-C{color:#991B1B}
+.ov-bar-row{display:flex;align-items:center;gap:0.5rem}
+.ov-bar-track{flex:1;height:4px;background:var(--bd);border-radius:99px;overflow:hidden}
+.ov-bar-fill{height:100%;border-radius:99px;transition:width 0.6s ease}
+.ov-focus-badge{background:var(--am);color:var(--a);border-radius:6px;padding:0.25rem 0.625rem;font-size:0.7rem;font-weight:500;display:inline-flex;align-items:center;gap:0.25rem}
+.ov-week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.ov-week-day{aspect-ratio:1;border-radius:3px;background:var(--bd);transition:background 0.2s}
+.ov-week-day.done{background:var(--a)}
+.ov-week-day.today{box-shadow:0 0 0 1.5px var(--a)}
+
+/* Overview additions for meridian-zenith: grades are not hardcoded here,
+   so the grade card needs a real empty state. */
+.ov-empty{
+  font-size:0.78rem;color:var(--tx-3);line-height:1.6;
+  padding:0.5rem 0;
+}
+.ov-empty button{
+  background:none;border:none;padding:0;
+  color:var(--a);font:inherit;cursor:pointer;text-decoration:underline;
+}
+.ov-card.wide{grid-column:span 2}
+
+@media (max-width:900px){
+  .overview-grid{padding:1rem;grid-template-columns:1fr}
+  .ov-card.wide{grid-column:span 1}
+}
+@media (prefers-reduced-motion:reduce){
+  .ov-bar-fill,.ov-week-day{transition:none}
+}
+
+/* ── Review tab ─────────────────────────────────────────────────────────────── */
+.review-wrap{
+  max-width:640px;margin:0 auto;padding:2rem 1.5rem;
+  display:flex;flex-direction:column;gap:1.25rem;
+}
+.review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.review-count{font-size:2.5rem;font-weight:300;letter-spacing:-0.04em;color:var(--a);line-height:1}
+.review-exams{display:flex;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end}
+.exam-pill{
+  background:var(--panel2);border:1px solid var(--bd);border-radius:99px;
+  padding:0.25rem 0.7rem;font-size:0.7rem;color:var(--tx-2);
+}
+.exam-pill.urgent{background:#FDECE4;border-color:#E8C4B0;color:#8A3D12}
+
+.review-empty{
+  background:var(--panel);border:1px solid var(--bd);border-radius:14px;
+  padding:2.5rem 1.5rem;text-align:center;
+  font-size:0.85rem;color:var(--tx-3);line-height:1.7;box-shadow:var(--shadow);
+}
+.review-done{font-size:2rem;color:var(--a);margin-bottom:0.5rem}
+
+.review-card{
+  background:var(--panel);border:1px solid var(--bd);border-radius:14px;
+  padding:1.75rem;display:flex;flex-direction:column;gap:0.75rem;box-shadow:var(--shadow);
+}
+.review-subject{display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap}
+.review-subj-tag{
+  font-size:0.62rem;text-transform:uppercase;letter-spacing:0.08em;
+  color:var(--a);background:var(--am);border-radius:5px;padding:0.2rem 0.5rem;
+}
+.review-exam-note{font-size:0.68rem;color:#C45C1A}
+.review-text{font-size:1.05rem;line-height:1.6;color:var(--tx)}
+.review-meta{font-size:0.7rem;color:var(--tx-3)}
+.review-prompt{
+  font-size:0.72rem;color:var(--tx-3);
+  border-top:1px solid var(--bd);padding-top:0.9rem;margin-top:0.35rem;
+}
+.review-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem}
+.rev-btn{
+  display:flex;flex-direction:column;align-items:center;gap:0.2rem;
+  background:var(--panel2);border:1px solid var(--bd);border-radius:9px;
+  padding:0.6rem 0.35rem;cursor:pointer;
+  font-size:0.76rem;color:var(--tx-2);font-family:inherit;
+  transition:border-color 0.15s,background 0.15s;
+}
+.rev-btn:hover{border-color:var(--tx-3)}
+.rev-gap{font-size:0.62rem;color:var(--tx-3);font-family:'JetBrains Mono',monospace}
+.rev-btn.again:hover{border-color:#991B1B;color:#991B1B}
+.rev-btn.hard:hover{border-color:#C45C1A;color:#C45C1A}
+.rev-btn.good:hover,.rev-btn.easy:hover{border-color:var(--a);color:var(--a)}
+.review-hint{font-size:0.62rem;color:var(--tx-3);text-align:center}
+.review-upcoming{font-size:0.72rem;color:var(--tx-3);text-align:center}
+
+/* ── Exam settings ──────────────────────────────────────────────────────────── */
+.exam-list{display:flex;flex-direction:column;gap:0.35rem;margin-bottom:0.6rem}
+.exam-row{
+  display:flex;align-items:center;gap:0.6rem;
+  background:var(--panel2);border:1px solid var(--bd);border-radius:8px;
+  padding:0.45rem 0.7rem;font-size:0.78rem;
+}
+.exam-row.soon{border-color:#E8C4B0}
+.exam-row.past{opacity:0.45}
+.exam-subject{flex:1;color:var(--tx-2)}
+.exam-when{font-size:0.7rem;color:var(--tx-3);font-family:'JetBrains Mono',monospace}
+.exam-del{background:none;border:none;color:var(--tx-3);cursor:pointer;font-size:1rem;line-height:1;padding:0 0.2rem}
+.exam-del:hover{color:#991B1B}
+.exam-add{flex-wrap:wrap}
+.settings-hint{font-size:0.7rem;color:var(--tx-3);line-height:1.6;margin-top:0.4rem}
+
+/* Task highlighted because its exam is close */
+.task-item.exam-focus .task-text::after{
+  content:'exam soon';
+  font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;
+  color:#C45C1A;background:#FDECE4;border-radius:4px;
+  padding:0.1rem 0.35rem;margin-left:0.45rem;vertical-align:middle;
+}
+
+@media (max-width:640px){
+  .review-wrap{padding:1.25rem 1rem}
+  .review-actions{grid-template-columns:repeat(2,1fr)}
+  .review-hint{display:none}
+}

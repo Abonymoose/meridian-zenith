@@ -266,9 +266,17 @@
     </div>
 
     <nav class="sidebar-nav">
+      <button class="nav-item" data-tab="overview">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        <span>overview</span>
+      </button>
       <button class="nav-item active" data-tab="session">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
         <span>session</span>
+      </button>
+      <button class="nav-item" data-tab="review">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3,3 3,9 9,9"/></svg>
+        <span>review</span>
       </button>
       <button class="nav-item" data-tab="plan">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -306,7 +314,9 @@
       </svg>
     </div>
     <div class="mobile-nav">
+      <button class="mob-nav" data-tab="overview">overview</button>
       <button class="mob-nav active" data-tab="session">session</button>
+      <button class="mob-nav" data-tab="review">review</button>
       <button class="mob-nav" data-tab="plan">plan</button>
       <button class="mob-nav" data-tab="cs">cs</button>
       <button class="mob-nav" data-tab="projects">projects</button>
@@ -320,6 +330,10 @@
   <div class="main-area">
 
     <!-- SESSION -->
+    <div id="tab-overview" class="tab">
+      <div class="overview-grid" id="overview-grid"></div>
+    </div>
+
     <div id="tab-session" class="tab active">
       <div class="session-layout">
 
@@ -479,6 +493,37 @@
     </div>
 
     <!-- PLAN -->
+    <div id="tab-review" class="tab">
+      <div class="review-wrap">
+
+        <div class="review-head">
+          <div>
+            <div class="review-count" id="review-count">0</div>
+            <div class="ov-stat-lbl">due today</div>
+          </div>
+          <div class="review-exams" id="review-exam"></div>
+        </div>
+
+        <div class="review-empty" id="review-empty"></div>
+
+        <div class="review-card" id="review-card" style="display:none">
+          <div class="review-subject" id="review-subject"></div>
+          <div class="review-text" id="review-text"></div>
+          <div class="review-meta" id="review-meta"></div>
+          <div class="review-prompt">how well do you remember this?</div>
+          <div class="review-actions" id="review-actions">
+            <button class="rev-btn again" data-q="again">forgot<span class="rev-gap"></span></button>
+            <button class="rev-btn hard"  data-q="hard">hard<span class="rev-gap"></span></button>
+            <button class="rev-btn good"  data-q="good">good<span class="rev-gap"></span></button>
+            <button class="rev-btn easy"  data-q="easy">easy<span class="rev-gap"></span></button>
+          </div>
+          <div class="review-hint">keys 1–4</div>
+        </div>
+
+        <div class="review-upcoming" id="review-upcoming"></div>
+      </div>
+    </div>
+
     <div id="tab-plan" class="tab">
       <div class="tab-header">
         <h1 class="tab-title" id="plan-title">my plan</h1>
@@ -618,6 +663,27 @@
         <button class="theme-btn" data-theme="rose"><span class="theme-dot" style="background:#1A0D12"></span>rose</button>
         <button class="theme-btn" data-theme="slate"><span class="theme-dot" style="background:#0F1117"></span>slate</button>
       </div>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">exam dates</label>
+      <div class="exam-list" id="s-exam-list"></div>
+      <div class="settings-row exam-add">
+        <input type="text" id="s-exam-subject" class="ob-input" placeholder="subject"/>
+        <input type="date" id="s-exam-date" class="ob-input"/>
+        <button class="btn-accent btn-sm" id="s-exam-add">add</button>
+      </div>
+      <p class="settings-hint">within two weeks of an exam, that subject moves to the top of your day and its review cards come back sooner.</p>
+    </div>
+
+    <div class="settings-section">
+      <label class="settings-label">backup</label>
+      <div class="settings-row">
+        <button class="btn-outline btn-sm" id="s-export">export to file</button>
+        <button class="btn-outline btn-sm" id="s-import-btn">restore from file</button>
+        <input type="file" id="s-import" accept="application/json,.json" style="display:none"/>
+      </div>
+      <p class="settings-hint">everything is stored in this browser only. export before clearing browsing data or switching device.</p>
     </div>
 
     <div class="settings-section settings-danger">
